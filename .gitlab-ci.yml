@@ -1,0 +1,165 @@
+# =============================================================================
+# BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline
+# =============================================================================
+#
+# Baut automatisch PDFs aus LaTeX-Quellen bei jedem Push.
+#
+# Trigger:
+#   - Push auf main → baut PDFs und committet sie zurück
+#   - Manuell → über GitLab UI "Run Pipeline"
+#
+# =============================================================================
+
+stages:
+  - build
+  - commit
+
+variables:
+  GIT_STRATEGY: clone
+  GIT_DEPTH: 0
+
+# -----------------------------------------------------------------------------
+# PDF Build Job
+# -----------------------------------------------------------------------------
+build-pdfs:
+  stage: build
+  image: texlive/texlive:latest  # Vollständiges LaTeX-Image
+  
+  script:
+    # Legal Formation Documents
+    - echo "📄 Building Legal Formation PDFs..."
+    - cd legal/formation/src
+    - |
+      for texfile in *.tex; do
+        if [ -f "$texfile" ]; then
+          echo "   Building $texfile..."
+          pdflatex -interaction=nonstopmode "$texfile" || true
+          pdflatex -interaction=nonstopmode "$texfile" || true  # Zweimal für Referenzen
+        fi
+      done
+    - mv *.pdf ../dist/ 2>/dev/null || true
+    - rm -f *.aux *.log *.out *.toc 2>/dev/null || true
+    - cd ../../..
+    
+    # Invoice Templates
+    - echo "📄 Building Invoice Template PDFs..."
+    - cd finance/templates/invoices/src
+    - |
+      for texfile in *.tex; do
+        if [ -f "$texfile" ]; then
+          echo "   Building $texfile..."
+          pdflatex -interaction=nonstopmode "$texfile" || true
+          pdflatex -interaction=nonstopmode "$texfile" || true
+        fi
+      done
+    - mv *.pdf ../dist/ 2>/dev/null || true
+    - rm -f *.aux *.log *.out *.toc 2>/dev/null || true
+    - cd ../../../..
+    
+    - echo "✅ PDF Build complete!"
+    - echo ""
+    - echo "Generated PDFs:"
+    - find . -name "*.pdf" -type f | head -20
+
+  artifacts:
+    paths:
+      - legal/formation/dist/*.pdf
+      - finance/templates/invoices/dist/*.pdf
+    expire_in: 1 week
+  
+  rules:
+    - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
+      when: never
+    - if: $CI_COMMIT_MESSAGE =~ /\[ci skip\]/
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - "**/*.tex"
+    - when: manual
+      allow_failure: true
+
+# -----------------------------------------------------------------------------
+# Commit PDFs back to repo (optional)
+# -----------------------------------------------------------------------------
+commit-pdfs:
+  stage: commit
+  image: alpine:latest
+  
+  needs:
+    - build-pdfs
+  
+  before_script:
+    - apk add --no-cache git openssh-client
+    - git config --global user.email "ci@blauweiss-edv.com"
+    - git config --global user.name "GitLab CI"
+  
+  script:
+    - echo "📤 Committing generated PDFs..."
+    
+    # SSH Key für Push einrichten (muss in GitLab CI/CD Variables gesetzt sein)
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+    
+    # Repo auschecken und PDFs hinzufügen
+    - git remote set-url origin git@gitlab.com:${CI_PROJECT_PATH}.git
+    - git fetch origin $CI_COMMIT_REF_NAME
+    - git checkout $CI_COMMIT_REF_NAME
+    
+    # PDFs aus Artifacts kopieren
+    - cp -r legal/formation/dist/*.pdf legal/formation/dist/ 2>/dev/null || true
+    - cp -r finance/templates/invoices/dist/*.pdf finance/templates/invoices/dist/ 2>/dev/null || true
+    
+    # Committen falls Änderungen
+    - git add "*.pdf"
+    - |
+      if git diff --staged --quiet; then
+        echo "No new PDFs to commit"
+      else
+        git commit -m "🤖 Auto-generate PDFs [skip ci]"
+        git push origin $CI_COMMIT_REF_NAME
+        echo "✅ PDFs committed!"
+      fi
+  
+  rules:
+    - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
+      when: never
+    - if: $CI_COMMIT_MESSAGE =~ /\[ci skip\]/
+      when: never
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: on_success
+    - when: never
+
+# -----------------------------------------------------------------------------
+# Einfache Variante: Nur bauen, manuell downloaden
+# -----------------------------------------------------------------------------
+build-pdfs-simple:
+  stage: build
+  image: texlive/texlive:latest
+  
+  script:
+    - echo "📄 Building all PDFs..."
+    
+    # Alle .tex Dateien finden und bauen
+    - |
+      find . -name "*.tex" -type f | while read texfile; do
+        dir=$(dirname "$texfile")
+        filename=$(basename "$texfile")
+        echo "Building $texfile..."
+        cd "$dir"
+        pdflatex -interaction=nonstopmode "$filename" || true
+        pdflatex -interaction=nonstopmode "$filename" || true
+        rm -f *.aux *.log *.out *.toc 2>/dev/null || true
+        cd - > /dev/null
+      done
+    
+    - echo "✅ Done! PDFs:"
+    - find . -name "*.pdf" -type f
+  
+  artifacts:
+    paths:
+      - "**/*.pdf"
+    expire_in: 1 week
+  
+  when: manual
