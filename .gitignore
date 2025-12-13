@@ -1,0 +1,30 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# LaTeX build files
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+
+# Temporary files
+*.tmp
+*.temp
+
+# Keep dist/ but ignore large binaries if needed
+# dist/*.pdf  # Uncomment to exclude PDFs from Git
+
+# Local config
+.env
+.env.local
