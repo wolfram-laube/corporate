@@ -36,7 +36,7 @@ corporate/
 
 Rechtsgültig unterschriebene Originale befinden sich im geteilten Google Drive:
 
-📁 **[Google Drive → Signierte Dokumente](https://drive.google.com/...)**
+📁 **[Google Drive → Signierte Dokumente](https://drive.google.com/drive/folders/0AHcy3s-c9X4AUk9PVA)**
 
 ## Team
 

@@ -20,4 +20,4 @@ Vertrag zwischen BLAUWEISS-EDV LLC und Wolfram Laube als Independent Contractor.
 
 ## Signierte Originale
 
-📁 **[Google Drive → Formation/Signed](https://drive.google.com/...)**
+📁 **[Google Drive → Formation/Signed](https://drive.google.com/drive/folders/0AHcy3s-c9X4AUk9PVA)**

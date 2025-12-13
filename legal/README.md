@@ -35,4 +35,4 @@ Jedes Dokument existiert in mehreren Formaten:
 
 ## Signierte Dokumente
 
-📁 **[Google Drive → Legal/Signed](https://drive.google.com/...)**
+📁 **[Google Drive → Legal/Signed](https://drive.google.com/drive/folders/0AHcy3s-c9X4AUk9PVA)**

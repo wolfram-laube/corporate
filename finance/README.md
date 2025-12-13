@@ -35,4 +35,4 @@ Siehe [`compliance/04_compliance-checklist.md`](compliance/04_compliance-checkli
 
 Tatsächliche Rechnungen werden in Google Drive gespeichert:
 
-📁 **[Google Drive → Finance/Invoices](https://drive.google.com/...)**
+📁 **[Google Drive → Finance/Invoices](https://drive.google.com/drive/folders/0AHcy3s-c9X4AUk9PVA)**
