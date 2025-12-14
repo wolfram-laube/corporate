@@ -5,7 +5,7 @@
 # Generiert PDF, DOCX, HTML, TEX aus:
 # - Markdown (.md) → Pandoc
 # - Typst (.typ) → Typst
-# - Quarto (.qmd) → Quarto (mit Python-Code-Ausführung)
+# - Quarto (.qmd) und Jupyter (.ipynb) → Quarto
 #
 # Single Source of Truth: nur Quelldateien editieren!
 #
@@ -166,7 +166,7 @@ build-typst-docs:
       allow_failure: true
 
 # =============================================================================
-# Job 3: Quarto (.qmd → PDF, HTML, DOCX)
+# Job 3: Quarto (.qmd und .ipynb → PDF, HTML, DOCX, TEX)
 # =============================================================================
 build-quarto-docs:
   stage: build
@@ -178,7 +178,7 @@ build-quarto-docs:
   
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends wget git ca-certificates xz-utils python3 python3-pip curl
+    - apt-get install -y --no-install-recommends wget git ca-certificates xz-utils python3 python3-pip curl texlive-xetex texlive-fonts-recommended texlive-latex-recommended lmodern
     # Typst für Quarto PDF
     - wget -qO- https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJf -
     - mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
@@ -187,7 +187,7 @@ build-quarto-docs:
     - dpkg -i quarto.deb || apt-get install -f -y
     - quarto --version
     # Python-Pakete für Code-Ausführung
-    - pip3 install --break-system-packages matplotlib numpy pandas jupyter
+    - pip3 install --break-system-packages matplotlib numpy pandas jupyter nbformat
     - git config --global user.email "ci@blauweiss-edv.com"
     - git config --global user.name "GitLab CI"
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
@@ -195,20 +195,32 @@ build-quarto-docs:
   script:
     - echo "📄 Building documents with Quarto..."
     
-    # Alle .qmd Dateien finden und rendern
+    # Alle .qmd Dateien rendern
     - |
       find . -name "*.qmd" -type f | while read qmdfile; do
         dir=$(dirname "$qmdfile")
-        echo "   Building $qmdfile → PDF, HTML, DOCX..."
-        cd "$dir"
-        quarto render "$(basename "$qmdfile")" --to typst || echo "   ⚠️ Typst PDF failed"
-        quarto render "$(basename "$qmdfile")" --to html || echo "   ⚠️ HTML failed"
-        quarto render "$(basename "$qmdfile")" --to docx || echo "   ⚠️ DOCX failed"
-        cd - > /dev/null
+        base=$(basename "$qmdfile" .qmd)
+        echo "   Building $qmdfile → PDF, HTML, DOCX, TEX..."
+        quarto render "$qmdfile" --to typst --output "${base}.pdf" || echo "   ⚠️ PDF failed"
+        quarto render "$qmdfile" --to html --output "${base}.html" || echo "   ⚠️ HTML failed"
+        quarto render "$qmdfile" --to docx --output "${base}.docx" || echo "   ⚠️ DOCX failed"
+        quarto render "$qmdfile" --to latex --output "${base}.tex" || echo "   ⚠️ TEX failed"
+      done
+    
+    # Alle .ipynb Dateien rendern
+    - |
+      find . -name "*.ipynb" -type f | while read ipynbfile; do
+        dir=$(dirname "$ipynbfile")
+        base=$(basename "$ipynbfile" .ipynb)
+        echo "   Building $ipynbfile → PDF, HTML, DOCX, TEX..."
+        quarto render "$ipynbfile" --to typst --output "${base}.pdf" || echo "   ⚠️ PDF failed"
+        quarto render "$ipynbfile" --to html --output "${base}.html" || echo "   ⚠️ HTML failed"
+        quarto render "$ipynbfile" --to docx --output "${base}.docx" || echo "   ⚠️ DOCX failed"
+        quarto render "$ipynbfile" --to latex --output "${base}.tex" || echo "   ⚠️ TEX failed"
       done
     
     - echo "✅ Quarto build complete!"
-    - find . \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" \) -type f | head -30
+    - find . \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" -o -name "*.tex" \) -type f | head -30
     
     # Commit
     - git add -A
@@ -216,7 +228,7 @@ build-quarto-docs:
       if git diff --staged --quiet; then
         echo "No Quarto changes to commit"
       else
-        git commit -m "🤖 Auto-generate documents from Quarto [skip ci]"
+        git commit -m "🤖 Auto-generate documents from Quarto/Jupyter [skip ci]"
         git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
         git fetch origin $CI_COMMIT_REF_NAME
         git rebase origin/$CI_COMMIT_REF_NAME || true
@@ -230,5 +242,6 @@ build-quarto-docs:
     - if: $CI_PIPELINE_SOURCE == "push"
       changes:
         - "**/*.qmd"
+        - "**/*.ipynb"
     - when: manual
       allow_failure: true
