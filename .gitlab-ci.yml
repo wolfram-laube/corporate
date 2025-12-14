@@ -2,7 +2,7 @@
 # BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline (Pandoc)
 # =============================================================================
 #
-# Generiert PDF, DOCX, HTML aus Markdown-Quellen
+# Generiert PDF, DOCX, HTML, TEX aus Markdown-Quellen
 # Single Source of Truth: nur .md editieren!
 #
 # =============================================================================
@@ -27,10 +27,11 @@ build-and-commit-docs:
       for mdfile in *.md; do
         if [ -f "$mdfile" ]; then
           basename="${mdfile%.md}"
-          echo "   Building $mdfile → PDF, DOCX, HTML..."
+          echo "   Building $mdfile → PDF, DOCX, HTML, TEX..."
           pandoc "$mdfile" -o "../dist/${basename}.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm -V mainfont="DejaVu Sans" || true
           pandoc "$mdfile" -o "../dist/${basename}.docx" || true
           pandoc "$mdfile" -o "../dist/${basename}.html" --standalone --metadata title="${basename}" || true
+          pandoc "$mdfile" -o "../dist/${basename}.tex" || true
         fi
       done
     - cd ../../..
@@ -42,17 +43,18 @@ build-and-commit-docs:
       for mdfile in *.md; do
         if [ -f "$mdfile" ]; then
           basename="${mdfile%.md}"
-          echo "   Building $mdfile → PDF, DOCX, HTML..."
+          echo "   Building $mdfile → PDF, DOCX, HTML, TEX..."
           pandoc "$mdfile" -o "../dist/${basename}.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm -V mainfont="DejaVu Sans" || true
           pandoc "$mdfile" -o "../dist/${basename}.docx" || true
           pandoc "$mdfile" -o "../dist/${basename}.html" --standalone --metadata title="${basename}" || true
+          pandoc "$mdfile" -o "../dist/${basename}.tex" || true
         fi
       done
     - cd ../../../..
     
     - echo "✅ Document Build complete!"
     - echo "Generated files:"
-    - find . -path ./node_modules -prune -o \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f -print
+    - find . -path ./node_modules -prune -o \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" -o -name "*.tex" \) -type f -print
     
     # Commit zurück ins Repo
     - echo "📤 Committing generated documents to repo..."
