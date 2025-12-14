@@ -7,12 +7,13 @@
 # - Typst (.typ) → Typst
 # - Quarto (.qmd) und Jupyter (.ipynb) → Quarto
 #
-# Single Source of Truth: nur Quelldateien editieren!
+# Race-Condition-sicher: Build-Jobs generieren nur, ein Commit-Job pushed alles.
 #
 # =============================================================================
 
 stages:
   - build
+  - commit
 
 # =============================================================================
 # Job 1: Pandoc (Markdown → PDF, DOCX, HTML, TEX)
@@ -28,9 +29,6 @@ build-pandoc-docs:
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends pandoc texlive-xetex texlive-fonts-recommended texlive-latex-recommended lmodern git ca-certificates
-    - git config --global user.email "ci@blauweiss-edv.com"
-    - git config --global user.name "GitLab CI"
-    - git config --global --add safe.directory "$CI_PROJECT_DIR"
   
   script:
     - echo "📄 Building documents with Pandoc..."
@@ -80,20 +78,13 @@ build-pandoc-docs:
       fi
     
     - echo "✅ Pandoc build complete!"
-    
-    # Commit
-    - git add -A
-    - |
-      if git diff --staged --quiet; then
-        echo "No Pandoc changes to commit"
-      else
-        git commit -m "🤖 Auto-generate documents from Markdown [skip ci]"
-        git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
-        git fetch origin $CI_COMMIT_REF_NAME
-        git rebase origin/$CI_COMMIT_REF_NAME || true
-        git push origin HEAD:$CI_COMMIT_REF_NAME
-        echo "✅ Pandoc documents committed!"
-      fi
+
+  artifacts:
+    paths:
+      - legal/formation/dist/
+      - finance/templates/invoices/dist/
+      - finance/compliance/
+    expire_in: 1 hour
 
   rules:
     - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
@@ -123,9 +114,6 @@ build-typst-docs:
     - wget -qO- https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJf -
     - mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
     - typst --version
-    - git config --global user.email "ci@blauweiss-edv.com"
-    - git config --global user.name "GitLab CI"
-    - git config --global --add safe.directory "$CI_PROJECT_DIR"
   
   script:
     - echo "📄 Building documents with Typst..."
@@ -140,21 +128,11 @@ build-typst-docs:
       done
     
     - echo "✅ Typst build complete!"
-    - find . -name "*.pdf" -type f | head -20
-    
-    # Commit
-    - git add -A
-    - |
-      if git diff --staged --quiet; then
-        echo "No Typst changes to commit"
-      else
-        git commit -m "🤖 Auto-generate PDFs from Typst [skip ci]"
-        git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
-        git fetch origin $CI_COMMIT_REF_NAME
-        git rebase origin/$CI_COMMIT_REF_NAME || true
-        git push origin HEAD:$CI_COMMIT_REF_NAME
-        echo "✅ Typst documents committed!"
-      fi
+
+  artifacts:
+    paths:
+      - "**/*.pdf"
+    expire_in: 1 hour
 
   rules:
     - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
@@ -188,9 +166,6 @@ build-quarto-docs:
     - quarto --version
     # Python-Pakete für Code-Ausführung
     - pip3 install matplotlib numpy pandas jupyter nbformat
-    - git config --global user.email "ci@blauweiss-edv.com"
-    - git config --global user.name "GitLab CI"
-    - git config --global --add safe.directory "$CI_PROJECT_DIR"
   
   script:
     - echo "📄 Building documents with Quarto..."
@@ -220,21 +195,14 @@ build-quarto-docs:
       done
     
     - echo "✅ Quarto build complete!"
-    - find . \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" -o -name "*.tex" \) -type f | head -30
-    
-    # Commit
-    - git add -A
-    - |
-      if git diff --staged --quiet; then
-        echo "No Quarto changes to commit"
-      else
-        git commit -m "🤖 Auto-generate documents from Quarto/Jupyter [skip ci]"
-        git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
-        git fetch origin $CI_COMMIT_REF_NAME
-        git rebase origin/$CI_COMMIT_REF_NAME || true
-        git push origin HEAD:$CI_COMMIT_REF_NAME
-        echo "✅ Quarto documents committed!"
-      fi
+
+  artifacts:
+    paths:
+      - "**/*.pdf"
+      - "**/*.html"
+      - "**/*.docx"
+      - "**/*.tex"
+    expire_in: 1 hour
 
   rules:
     - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
@@ -245,3 +213,64 @@ build-quarto-docs:
         - "**/*.ipynb"
     - when: manual
       allow_failure: true
+
+# =============================================================================
+# Job 4: Commit & Push (sammelt alle Artifacts und pushed einmal)
+# =============================================================================
+commit-all:
+  stage: commit
+  image: ubuntu:22.04
+  
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+    TZ: Europe/Vienna
+  
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates git-lfs
+    - git lfs install
+    - git config --global user.email "ci@blauweiss-edv.com"
+    - git config --global user.name "GitLab CI"
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+  
+  script:
+    - echo "📦 Committing all generated documents..."
+    
+    # Repo neu klonen für sauberen Stand
+    - git clone "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" repo_temp
+    - cd repo_temp
+    - git lfs install
+    
+    # Artifacts reinkopieren (aus den vorherigen Jobs)
+    - cp -r ../legal/ . 2>/dev/null || true
+    - cp -r ../finance/ . 2>/dev/null || true
+    - cp -r ../experimental/ . 2>/dev/null || true
+    
+    # Generierte Dateien im Wurzelverzeichnis
+    - find .. -maxdepth 1 \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" -o -name "*.tex" \) -exec cp {} . \; 2>/dev/null || true
+    
+    - git add -A
+    - |
+      if git diff --staged --quiet; then
+        echo "✅ No changes to commit"
+      else
+        git commit -m "🤖 Auto-generate documents [skip ci]"
+        git push origin HEAD:$CI_COMMIT_REF_NAME
+        echo "✅ All documents committed and pushed!"
+      fi
+
+  rules:
+    - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
+      when: never
+    - when: on_success
+
+  needs:
+    - job: build-pandoc-docs
+      optional: true
+      artifacts: true
+    - job: build-typst-docs
+      optional: true
+      artifacts: true
+    - job: build-quarto-docs
+      optional: true
+      artifacts: true
