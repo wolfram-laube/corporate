@@ -14,9 +14,13 @@ build-and-commit-docs:
   stage: build
   image: ubuntu:22.04
   
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+    TZ: Europe/Vienna
+  
   before_script:
     - apt-get update
-    - apt-get install -y pandoc texlive-xetex texlive-fonts-recommended git
+    - apt-get install -y --no-install-recommends pandoc texlive-xetex texlive-fonts-recommended git ca-certificates
     - git config --global user.email "ci@blauweiss-edv.com"
     - git config --global user.name "GitLab CI"
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
