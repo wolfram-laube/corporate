@@ -1,16 +1,20 @@
 # =============================================================================
-# BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline (Pandoc)
+# BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline (Pandoc + Typst)
 # =============================================================================
 #
-# Generiert PDF, DOCX, HTML, TEX aus Markdown-Quellen
-# Single Source of Truth: nur .md editieren!
+# Generiert PDF, DOCX, HTML, TEX aus Markdown-Quellen (Pandoc)
+# Generiert PDF aus Typst-Quellen (.typ)
+# Single Source of Truth: nur .md oder .typ editieren!
 #
 # =============================================================================
 
 stages:
   - build
 
-build-and-commit-docs:
+# =============================================================================
+# Job 1: Pandoc (Markdown → PDF, DOCX, HTML, TEX)
+# =============================================================================
+build-pandoc-docs:
   stage: build
   image: ubuntu:22.04
   
@@ -26,16 +30,12 @@ build-and-commit-docs:
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
   
   script:
-    - echo "📂 Working directory:"
-    - pwd
-    - ls -la
+    - echo "📄 Building documents with Pandoc..."
     
     # Legal Formation Documents
-    - echo "📄 Building Legal Formation Documents..."
     - |
       if [ -d "legal/formation/src" ]; then
         cd legal/formation/src
-        ls -la
         for mdfile in *.md; do
           if [ -f "$mdfile" ]; then
             basename="${mdfile%.md}"
@@ -47,16 +47,12 @@ build-and-commit-docs:
           fi
         done
         cd ../../..
-      else
-        echo "   ⚠️ legal/formation/src not found"
       fi
     
     # Invoice Templates
-    - echo "📄 Building Invoice Templates..."
     - |
       if [ -d "finance/templates/invoices/src" ]; then
         cd finance/templates/invoices/src
-        ls -la
         for mdfile in *.md; do
           if [ -f "$mdfile" ]; then
             basename="${mdfile%.md}"
@@ -68,12 +64,9 @@ build-and-commit-docs:
           fi
         done
         cd ../../../..
-      else
-        echo "   ⚠️ finance/templates/invoices/src not found"
       fi
     
     # Compliance Checklist
-    - echo "📄 Building Compliance Checklist..."
     - |
       if [ -f "finance/compliance/04_LLC_Compliance_Checklist.md" ]; then
         cd finance/compliance
@@ -83,32 +76,78 @@ build-and-commit-docs:
         cd ../..
       fi
     
-    - echo "✅ Document Build complete!"
-    - echo "Generated files:"
-    - find . -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) | grep -v README | head -50
+    - echo "✅ Pandoc build complete!"
     
-    # Commit zurück ins Repo
-    - echo "📤 Committing generated documents to repo..."
+    # Commit
     - git add -A
     - |
       if git diff --staged --quiet; then
-        echo "No changes to commit"
+        echo "No Pandoc changes to commit"
       else
         git commit -m "🤖 Auto-generate documents from Markdown [skip ci]"
         git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
         git fetch origin $CI_COMMIT_REF_NAME
         git rebase origin/$CI_COMMIT_REF_NAME || true
         git push origin HEAD:$CI_COMMIT_REF_NAME
-        echo "✅ Documents committed!"
+        echo "✅ Pandoc documents committed!"
       fi
 
   rules:
     - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
       when: never
-    - if: $CI_COMMIT_MESSAGE =~ /\[ci skip\]/
-      when: never
     - if: $CI_PIPELINE_SOURCE == "push"
       changes:
         - "**/*.md"
+    - when: manual
+      allow_failure: true
+
+# =============================================================================
+# Job 2: Typst (.typ → PDF)
+# =============================================================================
+build-typst-docs:
+  stage: build
+  image: ghcr.io/typst/typst:latest
+  
+  before_script:
+    - apk add --no-cache git
+    - git config --global user.email "ci@blauweiss-edv.com"
+    - git config --global user.name "GitLab CI"
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+  
+  script:
+    - echo "📄 Building documents with Typst..."
+    
+    # Alle .typ Dateien finden und kompilieren
+    - |
+      find . -name "*.typ" -type f | while read typfile; do
+        dir=$(dirname "$typfile")
+        base=$(basename "$typfile" .typ)
+        echo "   Building $typfile → PDF..."
+        typst compile "$typfile" "${dir}/${base}.pdf" || echo "   ⚠️ Failed: $typfile"
+      done
+    
+    - echo "✅ Typst build complete!"
+    - find . -name "*.pdf" -newer /tmp 2>/dev/null || true
+    
+    # Commit
+    - git add -A
+    - |
+      if git diff --staged --quiet; then
+        echo "No Typst changes to commit"
+      else
+        git commit -m "🤖 Auto-generate PDFs from Typst [skip ci]"
+        git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+        git fetch origin $CI_COMMIT_REF_NAME
+        git rebase origin/$CI_COMMIT_REF_NAME || true
+        git push origin HEAD:$CI_COMMIT_REF_NAME
+        echo "✅ Typst documents committed!"
+      fi
+
+  rules:
+    - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - "**/*.typ"
     - when: manual
       allow_failure: true
