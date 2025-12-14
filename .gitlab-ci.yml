@@ -187,7 +187,7 @@ build-quarto-docs:
     - dpkg -i quarto.deb || apt-get install -f -y
     - quarto --version
     # Python-Pakete für Code-Ausführung
-    - pip3 install --break-system-packages matplotlib numpy pandas jupyter nbformat
+    - pip3 install matplotlib numpy pandas jupyter nbformat
     - git config --global user.email "ci@blauweiss-edv.com"
     - git config --global user.name "GitLab CI"
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
