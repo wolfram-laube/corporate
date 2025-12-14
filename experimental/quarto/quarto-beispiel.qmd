@@ -1,0 +1,95 @@
+---
+title: "BLAUWEISS-EDV LLC – Quarto Beispiel"
+author: "Wolfram Laube"
+date: today
+format:
+  typst:
+    toc: true
+    number-sections: true
+  html:
+    toc: true
+  pdf:
+    toc: true
+  docx: default
+---
+
+# Einführung
+
+Dieses Dokument zeigt **Quarto** – ein modernes Publishing-System das Markdown, Code und verschiedene Output-Formate kombiniert.
+
+## Vorteile von Quarto
+
+- Markdown als Quelle
+- Mehrere Outputs: PDF (via Typst oder LaTeX), HTML, DOCX, Präsentationen
+- Code-Ausführung: Python, R, Julia
+- Wissenschaftliche Features: Zitate, Querverweise, Formeln
+
+# Code-Beispiele
+
+## Python
+
+```{python}
+#| echo: true
+#| label: fig-simple
+#| fig-cap: "Ein einfaches Beispiel"
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+x = np.linspace(0, 10, 100)
+y = np.sin(x)
+
+plt.figure(figsize=(8, 4))
+plt.plot(x, y, 'b-', linewidth=2)
+plt.title('Sinusfunktion')
+plt.xlabel('x')
+plt.ylabel('sin(x)')
+plt.grid(True)
+plt.show()
+```
+
+## Berechnungen inline
+
+```{python}
+#| echo: false
+revenue = 19320
+hours = 184
+rate = revenue / hours
+```
+
+Bei `{python} revenue` EUR Umsatz und `{python} hours` Stunden ergibt sich ein Stundensatz von `{python} f"{rate:.2f}"` EUR.
+
+# Tabellen
+
+| Position | Beschreibung | Betrag |
+|----------|--------------|--------|
+| 1 | Beratungsleistung Remote | € 8.400,00 |
+| 2 | Beratungsleistung On-Site | € 1.200,00 |
+| **Gesamt** | | **€ 9.600,00** |
+
+: Beispiel-Rechnung {#tbl-invoice}
+
+Siehe @tbl-invoice für die Aufstellung.
+
+# Mathematik
+
+Inline: $E = mc^2$
+
+Block:
+
+$$
+\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+$$
+
+# Querverweise
+
+Siehe @fig-simple für das Plot-Beispiel.
+
+# Fazit
+
+Quarto kombiniert:
+
+1. **Markdown** – einfache Syntax
+2. **Code** – ausführbar (Python, R, Julia)
+3. **Multi-Output** – PDF, HTML, DOCX, Slides
+4. **Typst** – modernes PDF-Rendering

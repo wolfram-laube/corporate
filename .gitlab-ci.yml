@@ -1,10 +1,13 @@
 # =============================================================================
-# BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline (Pandoc + Typst)
+# BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline (Pandoc + Typst + Quarto)
 # =============================================================================
 #
-# Generiert PDF, DOCX, HTML, TEX aus Markdown-Quellen (Pandoc)
-# Generiert PDF aus Typst-Quellen (.typ)
-# Single Source of Truth: nur .md oder .typ editieren!
+# Generiert PDF, DOCX, HTML, TEX aus:
+# - Markdown (.md) → Pandoc
+# - Typst (.typ) → Typst
+# - Quarto (.qmd) → Quarto (mit Python-Code-Ausführung)
+#
+# Single Source of Truth: nur Quelldateien editieren!
 #
 # =============================================================================
 
@@ -98,6 +101,7 @@ build-pandoc-docs:
     - if: $CI_PIPELINE_SOURCE == "push"
       changes:
         - "**/*.md"
+        - "!**/*.qmd"
     - when: manual
       allow_failure: true
 
@@ -158,5 +162,73 @@ build-typst-docs:
     - if: $CI_PIPELINE_SOURCE == "push"
       changes:
         - "**/*.typ"
+    - when: manual
+      allow_failure: true
+
+# =============================================================================
+# Job 3: Quarto (.qmd → PDF, HTML, DOCX)
+# =============================================================================
+build-quarto-docs:
+  stage: build
+  image: ubuntu:22.04
+  
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+    TZ: Europe/Vienna
+  
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends wget git ca-certificates xz-utils python3 python3-pip curl
+    # Typst für Quarto PDF
+    - wget -qO- https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJf -
+    - mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
+    # Quarto installieren
+    - wget -qO quarto.deb https://github.com/quarto-dev/quarto-cli/releases/download/v1.6.42/quarto-1.6.42-linux-amd64.deb
+    - dpkg -i quarto.deb || apt-get install -f -y
+    - quarto --version
+    # Python-Pakete für Code-Ausführung
+    - pip3 install --break-system-packages matplotlib numpy pandas jupyter
+    - git config --global user.email "ci@blauweiss-edv.com"
+    - git config --global user.name "GitLab CI"
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+  
+  script:
+    - echo "📄 Building documents with Quarto..."
+    
+    # Alle .qmd Dateien finden und rendern
+    - |
+      find . -name "*.qmd" -type f | while read qmdfile; do
+        dir=$(dirname "$qmdfile")
+        echo "   Building $qmdfile → PDF, HTML, DOCX..."
+        cd "$dir"
+        quarto render "$(basename "$qmdfile")" --to typst || echo "   ⚠️ Typst PDF failed"
+        quarto render "$(basename "$qmdfile")" --to html || echo "   ⚠️ HTML failed"
+        quarto render "$(basename "$qmdfile")" --to docx || echo "   ⚠️ DOCX failed"
+        cd - > /dev/null
+      done
+    
+    - echo "✅ Quarto build complete!"
+    - find . \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" \) -type f | head -30
+    
+    # Commit
+    - git add -A
+    - |
+      if git diff --staged --quiet; then
+        echo "No Quarto changes to commit"
+      else
+        git commit -m "🤖 Auto-generate documents from Quarto [skip ci]"
+        git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+        git fetch origin $CI_COMMIT_REF_NAME
+        git rebase origin/$CI_COMMIT_REF_NAME || true
+        git push origin HEAD:$CI_COMMIT_REF_NAME
+        echo "✅ Quarto documents committed!"
+      fi
+
+  rules:
+    - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - "**/*.qmd"
     - when: manual
       allow_failure: true
