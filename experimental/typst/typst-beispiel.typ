@@ -1,8 +1,8 @@
 // =============================================================================
 // BLAUWEISS-EDV LLC – Typst Beispiel-Dokument
 // =============================================================================
-// Kompilieren mit: typst compile beispiel.typ beispiel.pdf
-// Live-Preview: typst watch beispiel.typ
+// Kompilieren mit: typst compile typst-beispiel.typ typst-beispiel.pdf
+// Live-Preview: typst watch typst-beispiel.typ
 // =============================================================================
 
 // Seiteneinstellungen
@@ -13,7 +13,7 @@
     #set text(9pt, fill: gray)
     BLAUWEISS-EDV LLC #h(1fr) Beispiel-Dokument
   ],
-  footer: [
+  footer: context [
     #set text(9pt, fill: gray)
     #h(1fr) Seite #counter(page).display() #h(1fr)
   ]
