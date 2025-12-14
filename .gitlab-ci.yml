@@ -1,70 +1,72 @@
 # =============================================================================
-# BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline
+# BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline (Pandoc)
 # =============================================================================
 #
-# Baut PDFs aus LaTeX-Quellen und committet sie zurück ins Repo.
+# Generiert PDF, DOCX, HTML aus Markdown-Quellen
+# Single Source of Truth: nur .md editieren!
 #
 # =============================================================================
 
 stages:
   - build
 
-build-and-commit-pdfs:
+build-and-commit-docs:
   stage: build
-  image: texlive/texlive:latest
+  image: pandoc/extra:latest
   
   before_script:
-    - apt-get update && apt-get install -y git
+    - apk add --no-cache git
     - git config --global user.email "ci@blauweiss-edv.com"
     - git config --global user.name "GitLab CI"
   
   script:
     # Legal Formation Documents
-    - echo "📄 Building Legal Formation PDFs..."
+    - echo "📄 Building Legal Formation Documents..."
     - cd legal/formation/src
     - |
-      for texfile in *.tex; do
-        if [ -f "$texfile" ]; then
-          echo "   Building $texfile..."
-          pdflatex -interaction=nonstopmode "$texfile" || true
-          pdflatex -interaction=nonstopmode "$texfile" || true
+      for mdfile in *.md; do
+        if [ -f "$mdfile" ]; then
+          basename="${mdfile%.md}"
+          echo "   Building $mdfile → PDF, DOCX, HTML..."
+          pandoc "$mdfile" -o "../dist/${basename}.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm -V mainfont="DejaVu Sans" || true
+          pandoc "$mdfile" -o "../dist/${basename}.docx" || true
+          pandoc "$mdfile" -o "../dist/${basename}.html" --standalone --metadata title="${basename}" || true
         fi
       done
-    - mv *.pdf ../dist/ 2>/dev/null || true
-    - rm -f *.aux *.log *.out *.toc 2>/dev/null || true
     - cd ../../..
     
     # Invoice Templates
-    - echo "📄 Building Invoice Template PDFs..."
+    - echo "📄 Building Invoice Templates..."
     - cd finance/templates/invoices/src
     - |
-      for texfile in *.tex; do
-        if [ -f "$texfile" ]; then
-          echo "   Building $texfile..."
-          pdflatex -interaction=nonstopmode "$texfile" || true
-          pdflatex -interaction=nonstopmode "$texfile" || true
+      for mdfile in *.md; do
+        if [ -f "$mdfile" ]; then
+          basename="${mdfile%.md}"
+          echo "   Building $mdfile → PDF, DOCX, HTML..."
+          pandoc "$mdfile" -o "../dist/${basename}.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm -V mainfont="DejaVu Sans" || true
+          pandoc "$mdfile" -o "../dist/${basename}.docx" || true
+          pandoc "$mdfile" -o "../dist/${basename}.html" --standalone --metadata title="${basename}" || true
         fi
       done
-    - mv *.pdf ../dist/ 2>/dev/null || true
-    - rm -f *.aux *.log *.out *.toc 2>/dev/null || true
     - cd ../../../..
     
-    - echo "✅ PDF Build complete!"
-    - find . -name "*.pdf" -type f
+    - echo "✅ Document Build complete!"
+    - echo "Generated files:"
+    - find . -path ./node_modules -prune -o \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f -print
     
     # Commit zurück ins Repo
-    - echo "📤 Committing PDFs to repo..."
-    - git add "*.pdf"
+    - echo "📤 Committing generated documents to repo..."
+    - git add -A
     - |
       if git diff --staged --quiet; then
         echo "No changes to commit"
       else
-        git commit -m "🤖 Auto-generate PDFs [skip ci]"
+        git commit -m "🤖 Auto-generate documents from Markdown [skip ci]"
         git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
         git fetch origin $CI_COMMIT_REF_NAME
         git rebase origin/$CI_COMMIT_REF_NAME || true
         git push origin HEAD:$CI_COMMIT_REF_NAME
-        echo "✅ PDFs committed!"
+        echo "✅ Documents committed!"
       fi
 
   rules:
@@ -74,6 +76,6 @@ build-and-commit-pdfs:
       when: never
     - if: $CI_PIPELINE_SOURCE == "push"
       changes:
-        - "**/*.tex"
+        - "**/*.md"
     - when: manual
       allow_failure: true
