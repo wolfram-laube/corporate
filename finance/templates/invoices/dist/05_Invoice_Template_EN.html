@@ -1,240 +1,120 @@
 <!DOCTYPE html>
-<html lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLAUWEISS-EDV LLC - Invoice Template</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap');
-        
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Open Sans', Arial, sans-serif;
-            font-size: 11pt;
-            color: #333;
-            line-height: 1.4;
-        }
-        
-        .page {
-            width: 210mm;
-            min-height: 297mm;
-            padding: 20mm 20mm 25mm 25mm;
-            margin: 0 auto;
-            background: white;
-            position: relative;
-        }
-        
-        .header { display: flex; justify-content: space-between; margin-bottom: 15mm; }
-        
-        .logo { display: flex; align-items: center; gap: 5px; }
-        .logo-text-blau { font-size: 36pt; font-weight: 700; color: #00a5db; letter-spacing: -1px; }
-        .logo-dots { display: flex; flex-direction: column; align-items: center; margin: 0 3px; }
-        .logo-dot-large { width: 24px; height: 24px; background: #8dc63f; border-radius: 50%; margin-bottom: 4px; }
-        .logo-dots-row { display: flex; gap: 4px; }
-        .logo-dot-small { width: 10px; height: 10px; background: #8dc63f; border-radius: 50%; }
-        .logo-text-weiss { font-size: 36pt; font-weight: 700; color: #8dc63f; letter-spacing: -1px; }
-        
-        .company-info { text-align: right; color: #00a5db; font-size: 10pt; line-height: 1.5; }
-        .company-info .company-name { font-weight: 600; margin-bottom: 3mm; }
-        .company-info .contact { margin-top: 3mm; }
-        
-        .vertical-text {
-            position: absolute; right: 5mm; top: 50%;
-            transform: rotate(90deg) translateX(-50%);
-            transform-origin: right center;
-            color: #00a5db; font-size: 9pt; letter-spacing: 1px; white-space: nowrap;
-        }
-        
-        .recipient { margin-bottom: 10mm; min-height: 35mm; }
-        
-        .invoice-header { margin-bottom: 8mm; }
-        .invoice-title { color: #00a5db; font-size: 12pt; font-weight: 600; }
-        .invoice-meta { margin-top: 2mm; }
-        
-        .bank-notice {
-            background: #f5f5f5; padding: 3mm 4mm; margin-bottom: 5mm;
-            font-size: 9pt; border-left: 3px solid #00a5db;
-        }
-        
-        .trustee-notice {
-            background: #fff8e6; padding: 3mm 4mm; margin-bottom: 8mm;
-            font-size: 8pt; border-left: 3px solid #f0ad4e; color: #856404;
-        }
-        
-        .content { margin-bottom: 8mm; }
-        .salutation { margin-bottom: 5mm; }
-        .reference { margin-bottom: 5mm; }
-        
-        .invoice-table { width: 100%; border-collapse: collapse; margin: 8mm 0; }
-        .invoice-table th {
-            text-align: left; padding: 3mm 2mm;
-            border-bottom: 1px solid #00a5db; font-weight: 600; font-size: 10pt;
-        }
-        .invoice-table th:last-child { text-align: right; }
-        .invoice-table td { padding: 3mm 2mm; border-bottom: 1px solid #eee; }
-        .invoice-table td:last-child { text-align: right; }
-        .invoice-table .total-row td {
-            border-top: 2px solid #00a5db; border-bottom: none;
-            font-weight: 700; padding-top: 4mm;
-        }
-        
-        .closing { margin-top: 8mm; }
-        .payment-terms { margin: 5mm 0; }
-        .payment-terms ul { margin-left: 5mm; list-style-type: disc; }
-        
-        .signature { margin-top: 10mm; }
-        .signature-logo { margin-top: 5mm; }
-        .signature-logo .mini-blau { color: #00a5db; font-weight: 700; font-size: 14pt; }
-        .signature-logo .mini-weiss { color: #8dc63f; font-weight: 700; font-size: 14pt; }
-        .signature-details { font-size: 8pt; color: #666; margin-top: 2mm; }
-        
-        .attachments { margin-top: 8mm; font-size: 10pt; }
-        .attachments ul { margin-left: 5mm; list-style-type: disc; }
-        
-        .footer {
-            position: absolute; bottom: 10mm; left: 25mm; right: 20mm;
-            font-size: 8pt; color: #666; border-top: 1px solid #ddd; padding-top: 3mm;
-        }
-        .footer-content { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 3mm; }
-        .footer-item { white-space: nowrap; }
-        
-        .placeholder { background: #fff3cd; padding: 1px 4px; border-radius: 2px; font-family: monospace; }
-        
-        @media print { body { margin: 0; } .page { margin: 0; padding: 15mm 15mm 20mm 20mm; } }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>05_Invoice_Template_EN</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+  </style>
 </head>
 <body>
-    <div class="page">
-        <div class="header">
-            <div class="logo">
-                <span class="logo-text-blau">blau</span>
-                <div class="logo-dots">
-                    <div class="logo-dot-large"></div>
-                    <div class="logo-dots-row">
-                        <div class="logo-dot-small"></div>
-                        <div class="logo-dot-small"></div>
-                    </div>
-                </div>
-                <span class="logo-text-weiss">weiss</span>
-            </div>
-            <div class="company-info">
-                <div class="company-name">BLAUWEISS-EDV LLC</div>
-                <div>106 Stratford St</div>
-                <div>Houston, TX 77006</div>
-                <div>USA</div>
-                <div class="contact">
-                    <div>+1 832 517 1100</div>
-                    <div><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="1871767e77587a74796d6f7d716b6b357d7c6e367b7775">[email&#160;protected]</a></div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="vertical-text">www.blauweiss-edv.com</div>
-        
-        <div class="recipient">
-            <div><span class="placeholder">[Customer Name]</span></div>
-            <div><span class="placeholder">[Street Address]</span></div>
-            <div><span class="placeholder">[City, Postal Code]</span></div>
-            <div><span class="placeholder">[Country]</span></div>
-            <div style="margin-top: 2mm;"><span class="placeholder">[VAT ID]</span></div>
-        </div>
-        
-        <div class="invoice-header">
-            <div class="invoice-title">Invoice: <span class="placeholder">[Invoice Number]</span></div>
-            <div class="invoice-meta">Date: <span class="placeholder">[Date]</span></div>
-        </div>
-        
-        <div class="bank-notice">
-            <strong>Bank Details:</strong> Raiba St. Florian/Schärding &nbsp;|&nbsp; 
-            IBAN: AT78 3452 2000 0004 2135 &nbsp;|&nbsp;
-            BIC: RZOOAT2L522
-        </div>
-        
-        <div class="trustee-notice">
-            <strong>Notice:</strong> Payment to be received by Michael C. Matejka as authorized representative 
-            of BLAUWEISS-EDV LLC pending establishment of company bank account.
-        </div>
-        
-        <div class="content">
-            <div class="salutation">Dear Sir or Madam,</div>
-            <div class="reference">
-                with reference to <span class="placeholder">[Contract/Project/PO Number]</span>, 
-                we hereby invoice the following services:
-            </div>
-        </div>
-        
-        <table class="invoice-table">
-            <thead>
-                <tr>
-                    <th style="width: 50%;">Description</th>
-                    <th style="width: 15%;">Quantity</th>
-                    <th style="width: 15%;">Unit</th>
-                    <th style="width: 20%;">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Consulting services (remote)</td>
-                    <td><span class="placeholder">[Hours]</span></td>
-                    <td>hrs @ EUR <span class="placeholder">[Rate]</span></td>
-                    <td>EUR <span class="placeholder">[Amount]</span></td>
-                </tr>
-                <tr>
-                    <td>Consulting services (on-site)</td>
-                    <td><span class="placeholder">[Hours]</span></td>
-                    <td>hrs @ EUR <span class="placeholder">[Rate]</span></td>
-                    <td>EUR <span class="placeholder">[Amount]</span></td>
-                </tr>
-                <tr>
-                    <td colspan="3" style="font-size: 9pt; color: #666; padding-top: 2mm;">
-                        Services provided by non-EU business. Reverse charge mechanism applies 
-                        pursuant to Art. 196 EU VAT Directive. VAT to be accounted for by recipient.
-                    </td>
-                    <td></td>
-                </tr>
-                <tr class="total-row">
-                    <td colspan="3"><strong>Total</strong></td>
-                    <td><strong>EUR <span class="placeholder">[Total Amount]</span></strong></td>
-                </tr>
-            </tbody>
-        </table>
-        
-        <div class="closing">
-            <p>Thank you for your trust and the good cooperation.</p>
-            
-            <div class="payment-terms">
-                <p>Payment Terms:</p>
-                <ul>
-                    <li><span class="placeholder">[e.g. 3% discount if paid within 7 days]</span></li>
-                    <li><span class="placeholder">[e.g. Net 30 days]</span></li>
-                </ul>
-            </div>
-            
-            <p>Kind regards,</p>
-            
-            <div class="signature">
-                <div class="signature-logo">
-                    <span class="mini-blau">blau</span><span class="mini-weiss">weiss</span>
-                </div>
-                <div class="signature-details">
-                    BLAUWEISS-EDV LLC<br>
-                    <span class="placeholder">[Signature / Name]</span>
-                </div>
-            </div>
-            
-            <div class="attachments">
-                <p>Attachment:</p>
-                <ul>
-                    <li>Time Sheet</li>
-                </ul>
-            </div>
-        </div>
-        
-        <div class="footer">
-            <div class="footer-content">
-                <span class="footer-item">BLAUWEISS-EDV LLC</span>
-                <span class="footer-item">Texas File #806293404</span>
-                <span class="footer-item">EIN: 41-2477945</span>
-                <span class="footer-item">Raiba St. Florian/Schärding</span>
-                
+<h1 id="blauweiss-edv-llc-invoice-template">BLAUWEISS-EDV LLC – Invoice Template</h1>
+<hr />
+<p><strong>BLAUWEISS-EDV LLC</strong><br />
+106 Stratford St<br />
+Houston, TX 77006<br />
+USA</p>
+<p>Phone: +1 832 517 1100<br />
+Email: info@blauweiss-edv.com<br />
+Web: www.blauweiss-edv.com</p>
+<hr />
+<h2 id="bill-to">Bill To</h2>
+<p>[Customer Name]<br />
+[Street Address]<br />
+[City, Postal Code]<br />
+[Country]<br />
+VAT ID: [VAT ID]</p>
+<hr />
+<h2 id="invoice-invoice-number">Invoice: [INVOICE NUMBER]</h2>
+<p><strong>Date:</strong> [DATE]</p>
+<hr />
+<h3 id="bank-details">Bank Details</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Bank</th>
+<th>IBAN</th>
+<th>BIC/SWIFT</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Raiba St. Florian/Schärding</td>
+<td>AT78 3452 2000 0004 2135</td>
+<td>RZOOAT2L522</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Notice:</strong> Payment to be received by Michael C. Matejka as authorized representative of BLAUWEISS-EDV LLC pending establishment of company bank account.</p>
+</blockquote>
+<hr />
+<p>Dear Sir or Madam,</p>
+<p>with reference to [CONTRACT/PROJECT/PO NUMBER], we hereby invoice the following services:</p>
+<hr />
+<h3 id="services-rendered">Services Rendered</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Description</th>
+<th>Quantity</th>
+<th>Unit</th>
+<th>Amount</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Consulting services (remote)</td>
+<td>[HRS]</td>
+<td>hrs @ EUR [RATE]</td>
+<td>EUR [AMOUNT]</td>
+</tr>
+<tr class="even">
+<td>Consulting services (on-site)</td>
+<td>[HRS]</td>
+<td>hrs @ EUR [RATE]</td>
+<td>EUR [AMOUNT]</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>Total</strong></td>
+<td></td>
+<td></td>
+<td><strong>EUR [TOTAL]</strong></td>
+</tr>
+</tbody>
+</table>
+<p><em>Services provided by non-EU business. Reverse charge mechanism applies pursuant to Art. 196 EU VAT Directive. VAT to be accounted for by recipient.</em></p>
+<hr />
+<p>Thank you for your trust and the good cooperation.</p>
+<h3 id="payment-terms">Payment Terms</h3>
+<ul>
+<li>[e.g. 3% discount if paid within 7 days]</li>
+<li>[e.g. Net 30 days]</li>
+</ul>
+<p>Kind regards,</p>
+<p><strong>blauweiss</strong><br />
+BLAUWEISS-EDV LLC<br />
+[Signature / Name]</p>
+<hr />
+<h3 id="attachment">Attachment</h3>
+<ul>
+<li>Time Sheet</li>
+</ul>
+<hr />
+<p><strong>Footer:</strong><br />
+BLAUWEISS-EDV LLC | Texas File #806293404 | EIN: 41-2477945 | Raiba St. Florian/Schärding | IBAN: AT78 3452 2000 0004 2135</p>
+</body>
+</html>
