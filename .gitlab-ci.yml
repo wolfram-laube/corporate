@@ -2,7 +2,7 @@
 # BLAUWEISS-EDV LLC – GitLab CI/CD Pipeline (Pandoc)
 # =============================================================================
 #
-# Generiert PDF, DOCX, HTML aus Markdown-Quellen
+# Generiert PDF, DOCX, HTML, TEX aus Markdown-Quellen
 # Single Source of Truth: nur .md editieren!
 #
 # =============================================================================
@@ -12,47 +12,76 @@ stages:
 
 build-and-commit-docs:
   stage: build
-  image: pandoc/extra:latest
+  image: ubuntu:22.04
   
   before_script:
-    - apk add --no-cache git
+    - apt-get update
+    - apt-get install -y pandoc texlive-xetex texlive-fonts-recommended git
     - git config --global user.email "ci@blauweiss-edv.com"
     - git config --global user.name "GitLab CI"
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
   
   script:
+    - echo "📂 Working directory:"
+    - pwd
+    - ls -la
+    
     # Legal Formation Documents
     - echo "📄 Building Legal Formation Documents..."
-    - cd legal/formation/src
     - |
-      for mdfile in *.md; do
-        if [ -f "$mdfile" ]; then
-          basename="${mdfile%.md}"
-          echo "   Building $mdfile → PDF, DOCX, HTML..."
-          pandoc "$mdfile" -o "../dist/${basename}.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm -V mainfont="DejaVu Sans" || true
-          pandoc "$mdfile" -o "../dist/${basename}.docx" || true
-          pandoc "$mdfile" -o "../dist/${basename}.html" --standalone --metadata title="${basename}" || true
-        fi
-      done
-    - cd ../../..
+      if [ -d "legal/formation/src" ]; then
+        cd legal/formation/src
+        ls -la
+        for mdfile in *.md; do
+          if [ -f "$mdfile" ]; then
+            basename="${mdfile%.md}"
+            echo "   Building $mdfile → PDF, DOCX, HTML, TEX..."
+            pandoc "$mdfile" -o "../dist/${basename}.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm || echo "   ⚠️ PDF failed for $mdfile"
+            pandoc "$mdfile" -o "../dist/${basename}.docx" || echo "   ⚠️ DOCX failed for $mdfile"
+            pandoc "$mdfile" -o "../dist/${basename}.html" --standalone || echo "   ⚠️ HTML failed for $mdfile"
+            pandoc "$mdfile" -o "../dist/${basename}.tex" || echo "   ⚠️ TEX failed for $mdfile"
+          fi
+        done
+        cd ../../..
+      else
+        echo "   ⚠️ legal/formation/src not found"
+      fi
     
     # Invoice Templates
     - echo "📄 Building Invoice Templates..."
-    - cd finance/templates/invoices/src
     - |
-      for mdfile in *.md; do
-        if [ -f "$mdfile" ]; then
-          basename="${mdfile%.md}"
-          echo "   Building $mdfile → PDF, DOCX, HTML..."
-          pandoc "$mdfile" -o "../dist/${basename}.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm -V mainfont="DejaVu Sans" || true
-          pandoc "$mdfile" -o "../dist/${basename}.docx" || true
-          pandoc "$mdfile" -o "../dist/${basename}.html" --standalone --metadata title="${basename}" || true
-        fi
-      done
-    - cd ../../../..
+      if [ -d "finance/templates/invoices/src" ]; then
+        cd finance/templates/invoices/src
+        ls -la
+        for mdfile in *.md; do
+          if [ -f "$mdfile" ]; then
+            basename="${mdfile%.md}"
+            echo "   Building $mdfile → PDF, DOCX, HTML, TEX..."
+            pandoc "$mdfile" -o "../dist/${basename}.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm || echo "   ⚠️ PDF failed for $mdfile"
+            pandoc "$mdfile" -o "../dist/${basename}.docx" || echo "   ⚠️ DOCX failed for $mdfile"
+            pandoc "$mdfile" -o "../dist/${basename}.html" --standalone || echo "   ⚠️ HTML failed for $mdfile"
+            pandoc "$mdfile" -o "../dist/${basename}.tex" || echo "   ⚠️ TEX failed for $mdfile"
+          fi
+        done
+        cd ../../../..
+      else
+        echo "   ⚠️ finance/templates/invoices/src not found"
+      fi
+    
+    # Compliance Checklist
+    - echo "📄 Building Compliance Checklist..."
+    - |
+      if [ -f "finance/compliance/04_LLC_Compliance_Checklist.md" ]; then
+        cd finance/compliance
+        pandoc "04_LLC_Compliance_Checklist.md" -o "04_LLC_Compliance_Checklist.pdf" --pdf-engine=xelatex -V geometry:margin=2.5cm || echo "   ⚠️ PDF failed"
+        pandoc "04_LLC_Compliance_Checklist.md" -o "04_LLC_Compliance_Checklist.docx" || echo "   ⚠️ DOCX failed"
+        pandoc "04_LLC_Compliance_Checklist.md" -o "04_LLC_Compliance_Checklist.html" --standalone || echo "   ⚠️ HTML failed"
+        cd ../..
+      fi
     
     - echo "✅ Document Build complete!"
     - echo "Generated files:"
-    - find . -path ./node_modules -prune -o \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f -print
+    - find . -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) | grep -v README | head -50
     
     # Commit zurück ins Repo
     - echo "📤 Committing generated documents to repo..."
