@@ -12,7 +12,7 @@ E-Mail: wolfram.laube@blauweiss-edv.at
 **APOR Unternehmensverwaltung GmbH**  
 z.Hd. Mag.a Oberndorfer / Mag. Zellinger  
 Masseverwalter im Verfahren GZ 17 S 35/25 s  
-LG Ried im Innkreis
+Landesgericht Ried im Innkreis
 
 Schärding, am ________________
 
