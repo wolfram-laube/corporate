@@ -106,10 +106,19 @@ build-pandoc-docs:
 # =============================================================================
 build-typst-docs:
   stage: build
-  image: ghcr.io/typst/typst:latest
+  image: ubuntu:22.04
+  
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+    TZ: Europe/Vienna
   
   before_script:
-    - apk add --no-cache git
+    - apt-get update
+    - apt-get install -y --no-install-recommends wget git ca-certificates xz-utils
+    # Typst installieren
+    - wget -qO- https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJf -
+    - mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
+    - typst --version
     - git config --global user.email "ci@blauweiss-edv.com"
     - git config --global user.name "GitLab CI"
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
@@ -127,7 +136,7 @@ build-typst-docs:
       done
     
     - echo "✅ Typst build complete!"
-    - find . -name "*.pdf" -newer /tmp 2>/dev/null || true
+    - find . -name "*.pdf" -type f | head -20
     
     # Commit
     - git add -A
