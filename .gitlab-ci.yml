@@ -174,24 +174,26 @@ build-quarto-docs:
     - |
       find . -name "*.qmd" -type f | while read qmdfile; do
         dir=$(dirname "$qmdfile")
+        filename=$(basename "$qmdfile")
         base=$(basename "$qmdfile" .qmd)
         echo "   Building $qmdfile → PDF, HTML, DOCX, TEX..."
-        quarto render "$qmdfile" --to typst --output "${dir}/${base}.pdf" || echo "   ⚠️ PDF failed"
-        quarto render "$qmdfile" --to html --output "${dir}/${base}.html" || echo "   ⚠️ HTML failed"
-        quarto render "$qmdfile" --to docx --output "${dir}/${base}.docx" || echo "   ⚠️ DOCX failed"
-        quarto render "$qmdfile" --to latex --output "${dir}/${base}.tex" || echo "   ⚠️ TEX failed"
+        (cd "$dir" && quarto render "$filename" --to typst --output "${base}.pdf") || echo "   ⚠️ PDF failed"
+        (cd "$dir" && quarto render "$filename" --to html --output "${base}.html") || echo "   ⚠️ HTML failed"
+        (cd "$dir" && quarto render "$filename" --to docx --output "${base}.docx") || echo "   ⚠️ DOCX failed"
+        (cd "$dir" && quarto render "$filename" --to latex --output "${base}.tex") || echo "   ⚠️ TEX failed"
       done
     
     # Alle .ipynb Dateien rendern
     - |
       find . -name "*.ipynb" -type f | while read ipynbfile; do
         dir=$(dirname "$ipynbfile")
+        filename=$(basename "$ipynbfile")
         base=$(basename "$ipynbfile" .ipynb)
         echo "   Building $ipynbfile → PDF, HTML, DOCX, TEX..."
-        quarto render "$ipynbfile" --to typst --output "${dir}/${base}.pdf" || echo "   ⚠️ PDF failed"
-        quarto render "$ipynbfile" --to html --output "${dir}/${base}.html" || echo "   ⚠️ HTML failed"
-        quarto render "$ipynbfile" --to docx --output "${dir}/${base}.docx" || echo "   ⚠️ DOCX failed"
-        quarto render "$ipynbfile" --to latex --output "${dir}/${base}.tex" || echo "   ⚠️ TEX failed"
+        (cd "$dir" && quarto render "$filename" --to typst --output "${base}.pdf") || echo "   ⚠️ PDF failed"
+        (cd "$dir" && quarto render "$filename" --to html --output "${base}.html") || echo "   ⚠️ HTML failed"
+        (cd "$dir" && quarto render "$filename" --to docx --output "${base}.docx") || echo "   ⚠️ DOCX failed"
+        (cd "$dir" && quarto render "$filename" --to latex --output "${base}.tex") || echo "   ⚠️ TEX failed"
       done
     
     - echo "✅ Quarto build complete!"
