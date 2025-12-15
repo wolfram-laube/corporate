@@ -242,18 +242,31 @@ commit-all:
     - echo "=== Artifacts im Arbeitsverzeichnis ==="
     - find . -name "*.pdf" -o -name "*.html" -o -name "*.docx" | head -30
     
+    # Artifacts sichern bevor checkout sie überschreibt
+    - mkdir -p /tmp/artifacts
+    - cp -r . /tmp/artifacts/ 2>/dev/null || true
+    
     # Git für Push konfigurieren
     - git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
     - git fetch origin $CI_COMMIT_REF_NAME
-    - git checkout $CI_COMMIT_REF_NAME || git checkout -b $CI_COMMIT_REF_NAME origin/$CI_COMMIT_REF_NAME
+    - git checkout -f $CI_COMMIT_REF_NAME || git checkout -b $CI_COMMIT_REF_NAME origin/$CI_COMMIT_REF_NAME
     - git pull origin $CI_COMMIT_REF_NAME --rebase || true
+    
+    # Artifacts zurückkopieren
+    - cp -r /tmp/artifacts/legal/ . 2>/dev/null || true
+    - cp -r /tmp/artifacts/finance/ . 2>/dev/null || true
+    - cp -r /tmp/artifacts/experimental/ . 2>/dev/null || true
+    - find /tmp/artifacts -maxdepth 1 \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" -o -name "*.tex" \) -exec cp {} . \; 2>/dev/null || true
+    
+    - echo "=== Nach Restore ==="
+    - git status --short | head -20
     
     - git add -A
     - |
       if git diff --staged --quiet; then
         echo "✅ No changes to commit"
       else
-        git status
+        git status --short | head -20
         git commit -m "🤖 Auto-generate documents [skip ci]"
         git push origin $CI_COMMIT_REF_NAME
         echo "✅ All documents committed and pushed!"
