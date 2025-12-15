@@ -14,6 +14,7 @@
 stages:
   - build
   - commit
+  - upload
 
 # =============================================================================
 # Job 1: Pandoc (Markdown → PDF, DOCX, HTML, TEX)
@@ -287,3 +288,56 @@ commit-all:
     - job: build-quarto-docs
       optional: true
       artifacts: true
+
+# =============================================================================
+# Job 5: Upload to Google Drive
+# =============================================================================
+upload-to-gdrive:
+  stage: upload
+  image: ubuntu:22.04
+  
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+    TZ: Europe/Vienna
+  
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends curl unzip ca-certificates
+    # rclone installieren
+    - curl -O https://downloads.rclone.org/rclone-current-linux-amd64.zip
+    - unzip rclone-current-linux-amd64.zip
+    - cp rclone-*-linux-amd64/rclone /usr/local/bin/
+    - rclone --version
+  
+  script:
+    - echo "📤 Uploading documents to Google Drive..."
+    
+    # Zeige was wir haben
+    - echo "=== Files to upload ==="
+    - find . \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f | head -30
+    
+    # Upload alle PDFs
+    - |
+      find . -name "*.pdf" -type f | while read file; do
+        echo "   Uploading $file..."
+        rclone --config $RCLONE_CONF copy "$file" "gdrive:/BLAUWEISS-EDV-LLC/generated/" || echo "   ⚠️ Failed: $file"
+      done
+    
+    # Upload alle DOCX
+    - |
+      find . -name "*.docx" -type f | while read file; do
+        echo "   Uploading $file..."
+        rclone --config $RCLONE_CONF copy "$file" "gdrive:/BLAUWEISS-EDV-LLC/generated/" || echo "   ⚠️ Failed: $file"
+      done
+    
+    - echo "✅ Upload complete!"
+
+  rules:
+    - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
+      when: never
+    - when: always
+
+  needs:
+    - job: commit-all
+      artifacts: true
+
