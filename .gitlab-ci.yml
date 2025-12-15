@@ -264,7 +264,7 @@ commit-all:
   rules:
     - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
       when: never
-    - when: on_success
+    - when: always
 
   needs:
     - job: build-pandoc-docs
