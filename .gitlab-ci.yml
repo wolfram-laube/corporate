@@ -238,26 +238,24 @@ commit-all:
   script:
     - echo "📦 Committing all generated documents..."
     
-    # Repo neu klonen für sauberen Stand
-    - git clone "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" repo_temp
-    - cd repo_temp
-    - git lfs install --force
+    # Debug: Was haben wir?
+    - echo "=== Artifacts im Arbeitsverzeichnis ==="
+    - find . -name "*.pdf" -o -name "*.html" -o -name "*.docx" | head -30
     
-    # Artifacts reinkopieren (aus den vorherigen Jobs)
-    - cp -r ../legal/ . 2>/dev/null || true
-    - cp -r ../finance/ . 2>/dev/null || true
-    - cp -r ../experimental/ . 2>/dev/null || true
-    
-    # Generierte Dateien im Wurzelverzeichnis
-    - find .. -maxdepth 1 \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" -o -name "*.tex" \) -exec cp {} . \; 2>/dev/null || true
+    # Git für Push konfigurieren
+    - git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+    - git fetch origin $CI_COMMIT_REF_NAME
+    - git checkout $CI_COMMIT_REF_NAME || git checkout -b $CI_COMMIT_REF_NAME origin/$CI_COMMIT_REF_NAME
+    - git pull origin $CI_COMMIT_REF_NAME --rebase || true
     
     - git add -A
     - |
       if git diff --staged --quiet; then
         echo "✅ No changes to commit"
       else
+        git status
         git commit -m "🤖 Auto-generate documents [skip ci]"
-        git push origin HEAD:$CI_COMMIT_REF_NAME
+        git push origin $CI_COMMIT_REF_NAME
         echo "✅ All documents committed and pushed!"
       fi
 
