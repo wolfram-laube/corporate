@@ -10,6 +10,7 @@
 # Race-Condition-sicher: Build-Jobs generieren nur, ein Commit-Job pushed alles.
 #
 # FIXED: Artifact-Übergabe zwischen Stages (2025-12-18)
+# FIXED: GIT_STRATEGY: none für upload Job (2025-12-18)
 #
 # =============================================================================
 
@@ -247,6 +248,7 @@ commit-all:
   variables:
     DEBIAN_FRONTEND: noninteractive
     TZ: Europe/Vienna
+    GIT_STRATEGY: none  # Kein automatischer Checkout - wir arbeiten nur mit Artifacts!
   
   before_script:
     - apt-get update
@@ -261,12 +263,12 @@ commit-all:
     
     # DEBUG: Was haben wir von den Build-Jobs bekommen?
     - echo "=== Artifacts im Arbeitsverzeichnis (VOR checkout) ==="
-    - find . -name "*.pdf" -type f | head -40
+    - find . -name "*.pdf" -type f 2>/dev/null | head -40 || echo "Noch keine PDFs"
     - echo ""
     - echo "=== Speziell Typst-Invoices ==="
     - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs in Artifacts!"
     
-    # Artifacts sichern BEVOR checkout sie überschreibt
+    # Artifacts sichern BEVOR wir Git-Sachen machen
     - mkdir -p /tmp/artifacts
     - cp -r . /tmp/artifacts/ 2>/dev/null || true
     
@@ -274,14 +276,13 @@ commit-all:
     - echo "=== Gesicherte Artifacts in /tmp ==="
     - ls -la /tmp/artifacts/finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs gesichert!"
     
-    # Git für Push konfigurieren
-    - git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
-    - git fetch origin $CI_COMMIT_REF_NAME
-    - git checkout -f $CI_COMMIT_REF_NAME || git checkout -b $CI_COMMIT_REF_NAME origin/$CI_COMMIT_REF_NAME
-    - git pull origin $CI_COMMIT_REF_NAME --rebase || true
+    # Git repo frisch klonen (weil GIT_STRATEGY: none)
+    - git clone --depth 20 "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" repo
+    - cd repo
+    - git checkout $CI_COMMIT_REF_NAME || git checkout -b $CI_COMMIT_REF_NAME origin/$CI_COMMIT_REF_NAME
     
-    # Artifacts zurückkopieren - EXPLIZIT für jeden Ordner mit verbose
-    - echo "=== Restoring artifacts ==="
+    # Artifacts ins Repo kopieren
+    - echo "=== Restoring artifacts into repo ==="
     - cp -rv /tmp/artifacts/legal/ . 2>/dev/null || echo "ℹ️ No legal artifacts to restore"
     - cp -rv /tmp/artifacts/finance/ . 2>/dev/null || echo "ℹ️ No finance artifacts to restore"
     - cp -rv /tmp/artifacts/experimental/ . 2>/dev/null || echo "ℹ️ No experimental artifacts to restore"
@@ -336,6 +337,7 @@ upload-to-gdrive:
   variables:
     DEBIAN_FRONTEND: noninteractive
     TZ: Europe/Vienna
+    GIT_STRATEGY: none  # WICHTIG: Kein Git checkout, nur Artifacts verwenden!
   
   before_script:
     - apt-get update
@@ -377,7 +379,7 @@ upload-to-gdrive:
       when: never
     - when: always
 
-  # WICHTIG: Artifacts direkt von Build-Jobs holen, nicht nur von commit-all!
+  # Artifacts direkt von Build-Jobs holen
   needs:
     - job: build-pandoc-docs
       optional: true
