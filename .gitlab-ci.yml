@@ -9,8 +9,7 @@
 #
 # Race-Condition-sicher: Build-Jobs generieren nur, ein Commit-Job pushed alles.
 #
-# FIXED: Artifact-Übergabe zwischen Stages (2025-12-18)
-# FIXED: GIT_STRATEGY: none für upload Job (2025-12-18)
+# FIXED: Artifacts nach Git-Checkout nutzen (kein manueller checkout!)
 #
 # =============================================================================
 
@@ -81,10 +80,6 @@ build-pandoc-docs:
         cd ../..
       fi
     
-    # DEBUG: Zeige was generiert wurde
-    - echo "=== Generated Pandoc documents ==="
-    - find . \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f | grep -E "(legal|finance)" | head -30
-    
     - echo "✅ Pandoc build complete!"
 
   artifacts:
@@ -118,7 +113,6 @@ build-typst-docs:
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends wget git ca-certificates xz-utils
-    # Typst installieren
     - wget -qO- https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJf -
     - mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
     - typst --version
@@ -126,7 +120,6 @@ build-typst-docs:
   script:
     - echo "📄 Building documents with Typst..."
     
-    # Alle .typ Dateien finden und kompilieren
     - |
       find . -name "*.typ" -type f | while read typfile; do
         dir=$(dirname "$typfile")
@@ -135,20 +128,16 @@ build-typst-docs:
         typst compile "$typfile" "${dir}/${base}.pdf" || echo "   ⚠️ Failed: $typfile"
       done
     
-    # DEBUG: Zeige was generiert wurde
     - echo "=== Generated Typst PDFs ==="
     - find . -name "*.pdf" -type f | head -20
-    - echo "=== Speziell Invoice PDFs ==="
     - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "Keine Invoice PDFs"
     
     - echo "✅ Typst build complete!"
 
   artifacts:
     paths:
-      # Explizite Pfade für bessere Zuverlässigkeit
       - finance/templates/invoices/typst/*.pdf
       - experimental/typst/*.pdf
-      # Fallback: alle PDFs
       - "**/*.pdf"
     expire_in: 1 hour
 
@@ -175,20 +164,16 @@ build-quarto-docs:
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends wget git ca-certificates xz-utils python3 python3-pip curl texlive-xetex texlive-fonts-recommended texlive-latex-recommended lmodern
-    # Typst für Quarto PDF
     - wget -qO- https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJf -
     - mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
-    # Quarto installieren
     - wget -qO quarto.deb https://github.com/quarto-dev/quarto-cli/releases/download/v1.6.42/quarto-1.6.42-linux-amd64.deb
     - dpkg -i quarto.deb || apt-get install -f -y
     - quarto --version
-    # Python-Pakete für Code-Ausführung
     - pip3 install matplotlib numpy pandas jupyter nbformat
   
   script:
     - echo "📄 Building documents with Quarto..."
     
-    # Alle .qmd Dateien rendern
     - |
       find . -name "*.qmd" -type f | while read qmdfile; do
         dir=$(dirname "$qmdfile")
@@ -201,7 +186,6 @@ build-quarto-docs:
         (cd "$dir" && quarto render "$filename" --to latex --output "${base}.tex") || echo "   ⚠️ TEX failed"
       done
     
-    # Alle .ipynb Dateien rendern
     - |
       find . -name "*.ipynb" -type f | while read ipynbfile; do
         dir=$(dirname "$ipynbfile")
@@ -213,10 +197,6 @@ build-quarto-docs:
         (cd "$dir" && quarto render "$filename" --to docx --output "${base}.docx") || echo "   ⚠️ DOCX failed"
         (cd "$dir" && quarto render "$filename" --to latex --output "${base}.tex") || echo "   ⚠️ TEX failed"
       done
-    
-    # DEBUG: Zeige was generiert wurde
-    - echo "=== Generated Quarto documents ==="
-    - find . \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f | grep -E "(experimental|quarto)" | head -20
     
     - echo "✅ Quarto build complete!"
 
@@ -239,7 +219,7 @@ build-quarto-docs:
       allow_failure: true
 
 # =============================================================================
-# Job 4: Commit & Push (sammelt alle Artifacts und pushed einmal)
+# Job 4: Commit & Push
 # =============================================================================
 commit-all:
   stage: commit
@@ -248,7 +228,6 @@ commit-all:
   variables:
     DEBIAN_FRONTEND: noninteractive
     TZ: Europe/Vienna
-    GIT_STRATEGY: none  # Kein automatischer Checkout - wir arbeiten nur mit Artifacts!
   
   before_script:
     - apt-get update
@@ -261,39 +240,16 @@ commit-all:
   script:
     - echo "📦 Committing all generated documents..."
     
-    # DEBUG: Was haben wir von den Build-Jobs bekommen?
-    - echo "=== Artifacts im Arbeitsverzeichnis (VOR checkout) ==="
-    - find . -name "*.pdf" -type f 2>/dev/null | head -40 || echo "Noch keine PDFs"
+    # DEBUG: Was haben wir? (Artifacts wurden nach Git-Checkout entpackt!)
+    - echo "=== Artifacts im Arbeitsverzeichnis ==="
+    - find . -name "*.pdf" -type f | head -40
     - echo ""
     - echo "=== Speziell Typst-Invoices ==="
-    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs in Artifacts!"
+    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs!"
     
-    # Artifacts sichern BEVOR wir Git-Sachen machen
-    - mkdir -p /tmp/artifacts
-    - cp -r . /tmp/artifacts/ 2>/dev/null || true
+    # Git für Push konfigurieren (KEIN checkout - wir sind schon richtig!)
+    - git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
     
-    # DEBUG: Was wurde gesichert?
-    - echo "=== Gesicherte Artifacts in /tmp ==="
-    - ls -la /tmp/artifacts/finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs gesichert!"
-    
-    # Git repo frisch klonen (weil GIT_STRATEGY: none)
-    - git clone --depth 20 "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" repo
-    - cd repo
-    - git checkout $CI_COMMIT_REF_NAME || git checkout -b $CI_COMMIT_REF_NAME origin/$CI_COMMIT_REF_NAME
-    
-    # Artifacts ins Repo kopieren
-    - echo "=== Restoring artifacts into repo ==="
-    - cp -rv /tmp/artifacts/legal/ . 2>/dev/null || echo "ℹ️ No legal artifacts to restore"
-    - cp -rv /tmp/artifacts/finance/ . 2>/dev/null || echo "ℹ️ No finance artifacts to restore"
-    - cp -rv /tmp/artifacts/experimental/ . 2>/dev/null || echo "ℹ️ No experimental artifacts to restore"
-    - find /tmp/artifacts -maxdepth 1 \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" -o -name "*.tex" \) -exec cp -v {} . \; 2>/dev/null || true
-    
-    # DEBUG: Was haben wir jetzt?
-    - echo ""
-    - echo "=== Nach Restore - Typst Invoices ==="
-    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Immer noch keine Invoice PDFs!"
-    
-    - echo ""
     - echo "=== Git Status ==="
     - git status --short | head -30
     
@@ -302,12 +258,10 @@ commit-all:
       if git diff --staged --quiet; then
         echo "✅ No changes to commit"
       else
-        echo ""
         echo "=== Staged changes ==="
         git diff --staged --name-only | head -20
-        echo ""
         git commit -m "🤖 Auto-generate documents [skip ci]"
-        git push origin $CI_COMMIT_REF_NAME
+        git push origin HEAD:$CI_COMMIT_REF_NAME
         echo "✅ All documents committed and pushed!"
       fi
 
@@ -337,12 +291,10 @@ upload-to-gdrive:
   variables:
     DEBIAN_FRONTEND: noninteractive
     TZ: Europe/Vienna
-    GIT_STRATEGY: none  # WICHTIG: Kein Git checkout, nur Artifacts verwenden!
   
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends curl unzip ca-certificates
-    # rclone installieren
     - curl -O https://downloads.rclone.org/rclone-current-linux-amd64.zip
     - unzip rclone-current-linux-amd64.zip
     - cp rclone-*-linux-amd64/rclone /usr/local/bin/
@@ -356,7 +308,7 @@ upload-to-gdrive:
     - find . \( -name "*.pdf" -o -name "*.docx" \) -type f | head -40
     - echo ""
     - echo "=== Speziell Typst-Invoices ==="
-    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs für Upload!"
+    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs!"
     
     # Upload alle PDFs
     - |
@@ -379,7 +331,6 @@ upload-to-gdrive:
       when: never
     - when: always
 
-  # Artifacts direkt von Build-Jobs holen
   needs:
     - job: build-pandoc-docs
       optional: true
@@ -391,4 +342,4 @@ upload-to-gdrive:
       optional: true
       artifacts: true
     - job: commit-all
-      artifacts: false  # Von commit-all brauchen wir keine Artifacts
+      artifacts: false
