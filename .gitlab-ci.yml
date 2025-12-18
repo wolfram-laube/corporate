@@ -9,6 +9,8 @@
 #
 # Race-Condition-sicher: Build-Jobs generieren nur, ein Commit-Job pushed alles.
 #
+# FIXED: Artifact-Übergabe zwischen Stages (2025-12-18)
+#
 # =============================================================================
 
 stages:
@@ -78,6 +80,10 @@ build-pandoc-docs:
         cd ../..
       fi
     
+    # DEBUG: Zeige was generiert wurde
+    - echo "=== Generated Pandoc documents ==="
+    - find . \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f | grep -E "(legal|finance)" | head -30
+    
     - echo "✅ Pandoc build complete!"
 
   artifacts:
@@ -128,10 +134,20 @@ build-typst-docs:
         typst compile "$typfile" "${dir}/${base}.pdf" || echo "   ⚠️ Failed: $typfile"
       done
     
+    # DEBUG: Zeige was generiert wurde
+    - echo "=== Generated Typst PDFs ==="
+    - find . -name "*.pdf" -type f | head -20
+    - echo "=== Speziell Invoice PDFs ==="
+    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "Keine Invoice PDFs"
+    
     - echo "✅ Typst build complete!"
 
   artifacts:
     paths:
+      # Explizite Pfade für bessere Zuverlässigkeit
+      - finance/templates/invoices/typst/*.pdf
+      - experimental/typst/*.pdf
+      # Fallback: alle PDFs
       - "**/*.pdf"
     expire_in: 1 hour
 
@@ -197,6 +213,10 @@ build-quarto-docs:
         (cd "$dir" && quarto render "$filename" --to latex --output "${base}.tex") || echo "   ⚠️ TEX failed"
       done
     
+    # DEBUG: Zeige was generiert wurde
+    - echo "=== Generated Quarto documents ==="
+    - find . \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f | grep -E "(experimental|quarto)" | head -20
+    
     - echo "✅ Quarto build complete!"
 
   artifacts:
@@ -239,13 +259,20 @@ commit-all:
   script:
     - echo "📦 Committing all generated documents..."
     
-    # Debug: Was haben wir?
-    - echo "=== Artifacts im Arbeitsverzeichnis ==="
-    - find . -name "*.pdf" -o -name "*.html" -o -name "*.docx" | head -30
+    # DEBUG: Was haben wir von den Build-Jobs bekommen?
+    - echo "=== Artifacts im Arbeitsverzeichnis (VOR checkout) ==="
+    - find . -name "*.pdf" -type f | head -40
+    - echo ""
+    - echo "=== Speziell Typst-Invoices ==="
+    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs in Artifacts!"
     
-    # Artifacts sichern bevor checkout sie überschreibt
+    # Artifacts sichern BEVOR checkout sie überschreibt
     - mkdir -p /tmp/artifacts
     - cp -r . /tmp/artifacts/ 2>/dev/null || true
+    
+    # DEBUG: Was wurde gesichert?
+    - echo "=== Gesicherte Artifacts in /tmp ==="
+    - ls -la /tmp/artifacts/finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs gesichert!"
     
     # Git für Push konfigurieren
     - git remote set-url origin "https://oauth2:${PROJECT_ACCESS_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
@@ -253,21 +280,31 @@ commit-all:
     - git checkout -f $CI_COMMIT_REF_NAME || git checkout -b $CI_COMMIT_REF_NAME origin/$CI_COMMIT_REF_NAME
     - git pull origin $CI_COMMIT_REF_NAME --rebase || true
     
-    # Artifacts zurückkopieren
-    - cp -r /tmp/artifacts/legal/ . 2>/dev/null || true
-    - cp -r /tmp/artifacts/finance/ . 2>/dev/null || true
-    - cp -r /tmp/artifacts/experimental/ . 2>/dev/null || true
-    - find /tmp/artifacts -maxdepth 1 \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" -o -name "*.tex" \) -exec cp {} . \; 2>/dev/null || true
+    # Artifacts zurückkopieren - EXPLIZIT für jeden Ordner mit verbose
+    - echo "=== Restoring artifacts ==="
+    - cp -rv /tmp/artifacts/legal/ . 2>/dev/null || echo "ℹ️ No legal artifacts to restore"
+    - cp -rv /tmp/artifacts/finance/ . 2>/dev/null || echo "ℹ️ No finance artifacts to restore"
+    - cp -rv /tmp/artifacts/experimental/ . 2>/dev/null || echo "ℹ️ No experimental artifacts to restore"
+    - find /tmp/artifacts -maxdepth 1 \( -name "*.pdf" -o -name "*.html" -o -name "*.docx" -o -name "*.tex" \) -exec cp -v {} . \; 2>/dev/null || true
     
-    - echo "=== Nach Restore ==="
-    - git status --short | head -20
+    # DEBUG: Was haben wir jetzt?
+    - echo ""
+    - echo "=== Nach Restore - Typst Invoices ==="
+    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Immer noch keine Invoice PDFs!"
+    
+    - echo ""
+    - echo "=== Git Status ==="
+    - git status --short | head -30
     
     - git add -A
     - |
       if git diff --staged --quiet; then
         echo "✅ No changes to commit"
       else
-        git status --short | head -20
+        echo ""
+        echo "=== Staged changes ==="
+        git diff --staged --name-only | head -20
+        echo ""
         git commit -m "🤖 Auto-generate documents [skip ci]"
         git push origin $CI_COMMIT_REF_NAME
         echo "✅ All documents committed and pushed!"
@@ -277,7 +314,7 @@ commit-all:
     - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
       when: never
     - when: always
-
+    
   needs:
     - job: build-pandoc-docs
       optional: true
@@ -312,9 +349,12 @@ upload-to-gdrive:
   script:
     - echo "📤 Uploading documents to Google Drive..."
     
-    # Zeige was wir haben
-    - echo "=== Files to upload ==="
-    - find . \( -name "*.pdf" -o -name "*.docx" -o -name "*.html" \) -type f | head -30
+    # DEBUG: Was haben wir?
+    - echo "=== Files available for upload ==="
+    - find . \( -name "*.pdf" -o -name "*.docx" \) -type f | head -40
+    - echo ""
+    - echo "=== Speziell Typst-Invoices ==="
+    - ls -la finance/templates/invoices/typst/*.pdf 2>/dev/null || echo "⚠️ Keine Invoice PDFs für Upload!"
     
     # Upload alle PDFs
     - |
@@ -337,7 +377,16 @@ upload-to-gdrive:
       when: never
     - when: always
 
+  # WICHTIG: Artifacts direkt von Build-Jobs holen, nicht nur von commit-all!
   needs:
-    - job: commit-all
+    - job: build-pandoc-docs
+      optional: true
       artifacts: true
-
+    - job: build-typst-docs
+      optional: true
+      artifacts: true
+    - job: build-quarto-docs
+      optional: true
+      artifacts: true
+    - job: commit-all
+      artifacts: false  # Von commit-all brauchen wir keine Artifacts
