@@ -110,7 +110,7 @@ build-typst-docs:
         dir=$(dirname "$typfile")
         base=$(basename "$typfile" .typ)
         echo "   Building $typfile → PDF..."
-        typst compile "$typfile" "${dir}/${base}.pdf" || echo "   ⚠️ Failed: $typfile"
+        typst compile --font-path "$dir" "$typfile" "${dir}/${base}.pdf" || echo "   ⚠️ Failed: $typfile"
       done
     
     # Kopiere ALLE generierten Invoice PDFs in den generated Ordner
