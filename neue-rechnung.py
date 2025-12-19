@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
 BLAUWEISS-EDV LLC – Rechnungsgenerator (Multilingual)
-Erstellt Rechnungen für EU- und US-Kunden in DE/EN
-Reverse Charge nach Art. 196 MwStSystRL (Richtlinie 2006/112/EG)
+Erstellt Rechnungen basierend auf Zielregion und Sprachauswahl
+
+Steuerliche Behandlung (Quelle: USA → Ziel):
+- EU:       Reverse Charge Art. 196 MwStSystRL, USt-IdNr. Pflicht
+- USA:      Keine VAT, ggf. Sales Tax (B2B Services meist exempt)
+- Drittland: Keine EU-Reverse-Charge, lokale Regeln
 """
 
 import subprocess
@@ -13,29 +17,41 @@ from pathlib import Path
 # Pfad zum Template-Ordner
 TEMPLATE_DIR = Path(__file__).parent / "finance/templates/invoices/typst"
 
-# Invoice types
-INVOICE_TYPES = {
-    "de-eu": {
-        "name": "Deutsch (EU-Kunden)",
-        "template": "rechnung-de.typ",
-        "currency": "EUR",
+# Zielregionen mit steuerlicher Behandlung
+REGIONS = {
+    "eu": {
+        "name": "EU (Reverse Charge)",
+        "description": "Art. 196 MwStSystRL – Steuerschuldnerschaft beim Empfänger",
         "vat_required": True,
-        "vat_note": "Reverse Charge gem. Art. 196 der Richtlinie 2006/112/EG – MwStSystRL",
+        "reverse_charge": True,
+        "default_currency": "EUR",
+        "vat_note_de": "Reverse Charge gem. Art. 196 der Richtlinie 2006/112/EG – MwStSystRL",
+        "vat_note_en": "VAT reverse charge per Article 196 of Directive 2006/112/EC",
     },
-    "en-eu": {
-        "name": "English (EU Customers)",
-        "template": "invoice-en-eu.typ",
-        "currency": "EUR",
-        "vat_required": True,
-        "vat_note": "VAT reverse charge per Article 196 of Directive 2006/112/EC",
-    },
-    "en-us": {
-        "name": "English (US Customers)",
-        "template": "invoice-en-us.typ",
-        "currency": "USD",
+    "usa": {
+        "name": "USA (keine VAT)",
+        "description": "Keine Umsatzsteuer auf B2B-Dienstleistungen",
         "vat_required": False,
-        "vat_note": None,
+        "reverse_charge": False,
+        "default_currency": "USD",
+        "vat_note_de": None,
+        "vat_note_en": None,
     },
+    "third": {
+        "name": "Drittland (CH, UK, etc.)",
+        "description": "Keine EU-Reverse-Charge, steuerfreie Ausfuhr",
+        "vat_required": False,
+        "reverse_charge": False,
+        "default_currency": "EUR",
+        "vat_note_de": "Steuerfreie Ausfuhrlieferung / Dienstleistung an Drittland",
+        "vat_note_en": "Tax-exempt export / service to third country",
+    },
+}
+
+# Sprachen
+LANGUAGES = {
+    "de": {"name": "Deutsch", "code": "de"},
+    "en": {"name": "English", "code": "en"},
 }
 
 # Vordefinierte Kunden
@@ -48,7 +64,8 @@ KUNDEN = {
         "hrb": "HRB. NR.: 181535 Hamburg",
         "ust_id": "DE310161615",
         "projekt_nr": "00003151",
-        "type": "de-eu",
+        "region": "eu",
+        "lang": "de",
     },
     # Weitere Kunden hier hinzufügen...
 }
@@ -72,7 +89,7 @@ def frage(text, default=None, required=False):
             eingabe = input(f"{text}: ").strip()
             if eingabe or not required:
                 return eingabe
-            print("  ⚠️  Pflichtfeld - bitte einen Wert eingeben!")
+            print("  ⚠️  Pflichtfeld!")
 
 
 def frage_zahl(text, default=None):
@@ -89,34 +106,53 @@ def frage_zahl(text, default=None):
             print("  ⚠️  Bitte eine gültige Zahl eingeben!")
 
 
-def waehle_typ():
-    """Lässt den Benutzer den Rechnungstyp wählen"""
-    print("\n🌍 Rechnungstyp wählen:")
-    for i, (key, typ) in enumerate(INVOICE_TYPES.items(), 1):
-        vat = "✓ USt-IdNr. erforderlich" if typ["vat_required"] else "keine USt"
-        print(f"   {i}. {typ['name']} ({typ['currency']}, {vat})")
+def waehle_region():
+    """Lässt den Benutzer die Zielregion wählen"""
+    print("\n🌍 Zielregion wählen (steuerliche Behandlung):")
+    for i, (key, region) in enumerate(REGIONS.items(), 1):
+        vat = "USt-IdNr. erforderlich" if region["vat_required"] else "keine USt-IdNr."
+        print(f"   {i}. {region['name']}")
+        print(f"      → {region['description']} ({vat})")
 
     while True:
         try:
-            wahl = int(input("\nTyp wählen (Nummer): "))
-            if 1 <= wahl <= len(INVOICE_TYPES):
-                key = list(INVOICE_TYPES.keys())[wahl - 1]
-                return key, INVOICE_TYPES[key]
+            wahl = int(input("\nRegion wählen (1-3): "))
+            if 1 <= wahl <= len(REGIONS):
+                key = list(REGIONS.keys())[wahl - 1]
+                return key, REGIONS[key]
             else:
                 print("  ⚠️  Ungültige Auswahl!")
         except ValueError:
             print("  ⚠️  Bitte eine Nummer eingeben!")
 
 
-def waehle_kunde(inv_type):
+def waehle_sprache():
+    """Lässt den Benutzer die Sprache wählen"""
+    print("\n🗣️  Sprache wählen:")
+    for i, (key, lang) in enumerate(LANGUAGES.items(), 1):
+        print(f"   {i}. {lang['name']}")
+
+    while True:
+        try:
+            wahl = int(input("\nSprache wählen (1-2): "))
+            if 1 <= wahl <= len(LANGUAGES):
+                key = list(LANGUAGES.keys())[wahl - 1]
+                return key, LANGUAGES[key]
+            else:
+                print("  ⚠️  Ungültige Auswahl!")
+        except ValueError:
+            print("  ⚠️  Bitte eine Nummer eingeben!")
+
+
+def waehle_kunde(region_key, lang_key):
     """Lässt den Benutzer einen Kunden wählen oder neu eingeben"""
-    # Filter Kunden nach Typ
-    passende = {k: v for k, v in KUNDEN.items() if v.get("type") == inv_type}
+    # Filter Kunden nach Region
+    passende = {k: v for k, v in KUNDEN.items() if v.get("region") == region_key}
     
-    print(f"\n📋 Verfügbare Kunden ({INVOICE_TYPES[inv_type]['name']}):")
+    print(f"\n📋 Verfügbare Kunden ({REGIONS[region_key]['name']}):")
     alle_kunden = list(passende.items())
     for i, (key, kunde) in enumerate(alle_kunden, 1):
-        print(f"   {i}. {kunde['name']} ({key})")
+        print(f"   {i}. {kunde['name']}")
     print(f"   {len(alle_kunden) + 1}. Neuen Kunden eingeben")
 
     while True:
@@ -126,105 +162,88 @@ def waehle_kunde(inv_type):
                 key = alle_kunden[wahl - 1][0]
                 return KUNDEN[key], key
             elif wahl == len(alle_kunden) + 1:
-                return kunde_eingeben(inv_type), "neu"
+                return kunde_eingeben(region_key, lang_key), "neu"
             else:
                 print("  ⚠️  Ungültige Auswahl!")
         except ValueError:
             print("  ⚠️  Bitte eine Nummer eingeben!")
 
 
-def kunde_eingeben(inv_type):
+def kunde_eingeben(region_key, lang_key):
     """Neuen Kunden manuell eingeben"""
-    typ_info = INVOICE_TYPES[inv_type]
+    region = REGIONS[region_key]
+    is_en = lang_key == "en"
     
-    if inv_type == "en-us":
-        print("\n📝 Enter new customer (US):")
-        return {
+    if is_en:
+        print("\n📝 Enter new customer:")
+        kunde = {
             "name": frage("   Company name", required=True),
             "adresse": frage("   Street address", required=True),
-            "plz_ort": frage("   City, State ZIP", required=True),
-            "land": "USA",
-            "hrb": frage("   Registration (optional)", ""),
-            "ein": frage("   EIN (optional)", ""),
-            "projekt_nr": frage("   Project No.", ""),
-            "type": inv_type,
-        }
-    elif inv_type == "en-eu":
-        print("\n📝 Enter new customer (EU):")
-        return {
-            "name": frage("   Company name", required=True),
-            "adresse": frage("   Street address", required=True),
-            "plz_ort": frage("   Postal code + City", required=True),
+            "plz_ort": frage("   City / Postal code", required=True),
             "land": frage("   Country", required=True),
             "hrb": frage("   Registration (optional)", ""),
-            "ust_id": frage("   VAT ID (required for reverse charge)", required=True),
             "projekt_nr": frage("   Project No.", ""),
-            "type": inv_type,
+            "region": region_key,
+            "lang": lang_key,
         }
-    else:  # de-eu
-        print("\n📝 Neuen Kunden eingeben (EU):")
-        return {
+        if region["vat_required"]:
+            kunde["ust_id"] = frage("   VAT ID (required)", required=True)
+    else:
+        print("\n📝 Neuen Kunden eingeben:")
+        kunde = {
             "name": frage("   Firmenname", required=True),
             "adresse": frage("   Straße", required=True),
             "plz_ort": frage("   PLZ + Ort", required=True),
-            "land": frage("   Land", "Deutschland"),
+            "land": frage("   Land", required=True),
             "hrb": frage("   Handelsregister", ""),
-            "ust_id": frage("   USt-IdNr. (Pflicht bei Reverse Charge)", required=True),
             "projekt_nr": frage("   Projekt-Nr.", ""),
-            "type": inv_type,
+            "region": region_key,
+            "lang": lang_key,
         }
-
-
-def positionen_eingeben(inv_type):
-    """Fragt nach den Rechnungspositionen"""
-    typ_info = INVOICE_TYPES[inv_type]
-    currency = typ_info["currency"]
+        if region["vat_required"]:
+            kunde["ust_id"] = frage("   USt-IdNr. (Pflicht bei Reverse Charge)", required=True)
     
-    if inv_type.startswith("en"):
-        print("\n💰 Enter line items:")
+    return kunde
+
+
+def positionen_eingeben(lang_key, currency):
+    """Fragt nach den Rechnungspositionen"""
+    is_en = lang_key == "en"
+    
+    if is_en:
+        print(f"\n💰 Enter line items ({currency}):")
         remote_label = "Remote consulting services"
         onsite_label = "On-site consulting services"
-        remote_prompt = "   Remote hours"
-        onsite_prompt = "   On-site hours"
-        rate_prompt = f"   Hourly rate ({currency})"
-        more_prompt = "\n   Add another item? (y/N): "
-        desc_prompt = "   Description"
-        qty_prompt = "   Quantity"
-        unit_prompt = "   Unit"
-        price_prompt = f"   Unit price ({currency})"
+        unit = "hrs"
     else:
-        print("\n💰 Positionen eingeben:")
+        print(f"\n💰 Positionen eingeben ({currency}):")
         remote_label = "Beratungsleistung remote"
         onsite_label = "Beratungsleistung on-site"
-        remote_prompt = "   Remote-Stunden"
-        onsite_prompt = "   Onsite-Stunden"
-        rate_prompt = f"   Stundensatz ({currency})"
-        more_prompt = "\n   Weitere Position hinzufügen? (j/N): "
-        desc_prompt = "   Beschreibung"
-        qty_prompt = "   Menge"
-        unit_prompt = "   Einheit"
-        price_prompt = f"   Einzelpreis ({currency})"
+        unit = "Ph"
 
-    remote_stunden = frage_zahl(remote_prompt, 0)
-    remote_preis = frage_zahl(rate_prompt, 105)
+    prompt = lambda t, d=None: frage_zahl(f"   {t}", d)
+    
+    remote_stunden = prompt("Remote hours" if is_en else "Remote-Stunden", 0)
+    remote_preis = prompt(f"Hourly rate ({currency})" if is_en else f"Stundensatz ({currency})", 105)
 
-    onsite_stunden = frage_zahl(onsite_prompt, 0)
-    onsite_preis = frage_zahl(rate_prompt, 120)
+    onsite_stunden = prompt("On-site hours" if is_en else "Onsite-Stunden", 0)
+    onsite_preis = prompt(f"On-site rate ({currency})" if is_en else f"Onsite-Satz ({currency})", 120)
 
     positionen = []
     if remote_stunden > 0:
-        positionen.append((remote_label, remote_stunden, "hrs" if inv_type.startswith("en") else "Ph", remote_preis))
+        positionen.append((remote_label, remote_stunden, unit, remote_preis))
     if onsite_stunden > 0:
-        positionen.append((onsite_label, onsite_stunden, "hrs" if inv_type.startswith("en") else "Ph", onsite_preis))
+        positionen.append((onsite_label, onsite_stunden, unit, onsite_preis))
 
     # Weitere Positionen?
+    more_prompt = "\n   Add another item? (y/N): " if is_en else "\n   Weitere Position? (j/N): "
     while True:
         weitere = input(more_prompt).strip().lower()
         if weitere in ('j', 'y'):
-            beschreibung = frage(desc_prompt)
-            menge = frage_zahl(qty_prompt)
-            einheit = frage(unit_prompt, "pcs" if inv_type.startswith("en") else "Stk")
-            preis = frage_zahl(price_prompt)
+            beschreibung = frage("   Description" if is_en else "   Beschreibung")
+            menge = frage_zahl("   Quantity" if is_en else "   Menge")
+            einheit = frage("   Unit" if is_en else "   Einheit", "pcs" if is_en else "Stk")
+            preis = frage_zahl(f"   Unit price ({currency})" if is_en else f"   Einzelpreis ({currency})")
             positionen.append((beschreibung, menge, einheit, preis))
         else:
             break
@@ -232,225 +251,146 @@ def positionen_eingeben(inv_type):
     return positionen
 
 
-def generiere_rechnung_de_eu(rechnung_nr, datum, kunde, positionen):
-    """Generiert deutsche EU-Rechnung mit Art. 196"""
+def format_datum(lang_key):
+    """Gibt aktuelles Datum formatiert zurück"""
+    if lang_key == "de":
+        datum = datetime.now().strftime("%d. %B %Y")
+        for en, de in MONATE_DE.items():
+            datum = datum.replace(en, de)
+        return datum
+    else:
+        return datetime.now().strftime("%B %d, %Y")
+
+
+def generiere_typst_code(rechnung_nr, datum, kunde, positionen, region_key, lang_key, currency):
+    """Generiert den Typst-Code basierend auf Region und Sprache"""
+    region = REGIONS[region_key]
+    is_en = lang_key == "en"
+    
+    # Positionen formatieren
     pos_code = "(\n"
     for pos in positionen:
         pos_code += f'  ("{pos[0]}", {pos[1]:.2f}, "{pos[2]}", {pos[3]:.2f}),\n'
     pos_code += ")"
 
-    return f'''// =============================================================================
-// BLAUWEISS-EDV LLC – Rechnung {rechnung_nr}
-// Generiert am {datetime.now().strftime("%Y-%m-%d %H:%M")}
-// Reverse Charge nach Art. 196 MwStSystRL (Richtlinie 2006/112/EG)
-// =============================================================================
+    # VAT-Hinweis
+    vat_note = region["vat_note_en"] if is_en else region["vat_note_de"]
+    
+    # Texte basierend auf Sprache
+    if is_en:
+        texts = {
+            "invoice": "Invoice",
+            "date": "Date",
+            "project": "Project",
+            "description": "Description",
+            "quantity": "Quantity",
+            "unit_price": "Unit Price",
+            "amount": "Amount",
+            "total": "Total (net)" if region["reverse_charge"] else "Total Due",
+            "greeting": "Dear Sir or Madam,",
+            "intro": f"With reference to project contract no.",
+            "intro2": ", please find below our invoice for services rendered:",
+            "thanks": "We thank you for your trust and the good cooperation.",
+            "payment": "Please remit the invoice amount to the bank account stated above.",
+            "discount": "3% discount for immediate payment (1-2 days)",
+            "regards": "Kind regards,",
+            "signature": "Authorized Signature",
+            "enclosure": "Enclosure:",
+            "service_report": "Service Report",
+            "digital_sig": "Digital Signature",
+            "attention": "ATTENTION!",
+            "bank_note": "Please note the bank details:",
+            "vat_label": "VAT ID",
+            "no_vat": "No VAT charged – reverse charge applies, customer is liable for VAT" if region["reverse_charge"] else "",
+        }
+    else:
+        texts = {
+            "invoice": "Rechnung",
+            "date": "Datum",
+            "project": "Projekt",
+            "description": "Beschreibung",
+            "quantity": "Menge",
+            "unit_price": "Einzelpreis",
+            "amount": "Betrag",
+            "total": "Gesamt (netto)" if region["reverse_charge"] else "Gesamt",
+            "greeting": "Sehr geehrte Damen und Herren!",
+            "intro": f"Bezugnehmend auf den Projektvertrag Nr.",
+            "intro2": " erlauben wir uns folgende Positionen in Rechnung zu stellen:",
+            "thanks": "Wir bedanken uns für das Vertrauen und die gute Zusammenarbeit.",
+            "payment": "Bitte überweisen Sie den Rechnungsbetrag an die genannte Bankverbindung.",
+            "discount": "3% Skonto bei Sofortzahlung (1-2 Tage)",
+            "regards": "Mit freundlichen Grüßen,",
+            "signature": "Autorisierte Unterschrift",
+            "enclosure": "Anlage:",
+            "service_report": "Leistungsschein",
+            "digital_sig": "Digitale Signatur",
+            "attention": "ACHTUNG!",
+            "bank_note": "Bitte berücksichtigen Sie die Bankverbindung:",
+            "vat_label": "USt-IdNr.",
+            "no_vat": "Kein Ausweis von Umsatzsteuer – Leistungsempfänger schuldet die Steuer" if region["reverse_charge"] else "",
+        }
 
-// === RECHNUNGSDATEN ===
-#let rechnung_nr = "{rechnung_nr}"
-#let datum = "{datum}"
-#let projekt_nr = "{kunde.get('projekt_nr', '')}"
-
-// Kunde
-#let kunde_name = "{kunde['name']}"
-#let kunde_adresse = "{kunde['adresse']}"
-#let kunde_plz_ort = "{kunde['plz_ort']}"
-#let kunde_hrb = "{kunde.get('hrb', '')}"
-#let kunde_ust_id = "{kunde.get('ust_id', '')}"
-
-// Positionen
-#let positionen = {pos_code}
-
-// Zahlungshinweis
-#let skonto_text = "3% Skonto bei Sofortzahlung (1-2 Tage)"
-
-// === FIRMENDATEN ===
-#let firma_name = "BLAUWEISS-EDV LLC"
-#let firma_adresse = "106 Stratford St"
-#let firma_plz_ort = "Houston, TX 77006"
-#let firma_land = "USA"
-#let firma_telefon = "+1 832 517 1100"
-#let firma_email = "info@blauweiss-edv.com"
-#let firma_web = "www.blauweiss-edv.com"
-
-// Bankverbindung
-#let bank_name = "Raiba St. Florian/Schärding"
-#let bank_iban = "AT46 2032 6000 0007 0623"
-#let bank_bic = "RZOOAT2L522"
-#let bank_hinweis = "Zahlungen treuhänderisch an M. Matejka bis Eröffnung US-Firmenkontos"
-
-// === FARBEN ===
-#let blau = rgb("#1e5a99")
-#let gruen = rgb("#8dc63f")
-#let cyan = rgb("#00b4d8")
-#let hellcyan = rgb("#e0f7fa")
-
-// === SEITENEINRICHTUNG ===
-#set page(
-  paper: "a4",
-  margin: (top: 2.5cm, bottom: 3cm, left: 2cm, right: 1.5cm),
-  footer: [
-    #set text(size: 8pt, fill: gray)
-    #line(length: 100%, stroke: 0.5pt + gray)
-    #v(3pt)
-    #grid(
-      columns: (1fr, 1fr, 1fr),
-      align: (left, center, right),
-      [#bank_name | BIC: #bank_bic],
-      [IBAN: #bank_iban],
-      [#firma_web],
-    )
-  ]
-)
-
-#set text(font: "Inter", size: 10pt)
-
-// === HEADER MIT LOGO ===
-#grid(
-  columns: (1fr, auto),
-  gutter: 1cm,
-  [#image("logo-blauweiss.png", width: 6cm)],
-  [
-    #box(fill: hellcyan, inset: 10pt, radius: 3pt)[
-      #set text(size: 9pt)
-      #strong[#firma_name]
-      
-      #firma_adresse \\
-      #firma_plz_ort \\
-      #firma_land
-      
-      #v(0.3cm)
-      #text(fill: cyan)[#firma_telefon] \\
-      #text(fill: cyan)[#firma_email]
-    ]
-  ]
-)
-
-#v(1cm)
-
-// === KUNDENADRESSE ===
-#kunde_name \\
-#kunde_adresse \\
-#kunde_plz_ort \\
-#kunde_hrb \\
-USt-IdNr.: #kunde_ust_id
-
-#v(1cm)
-
-// === RECHNUNGSTITEL ===
-#grid(
-  columns: (auto, auto),
-  gutter: 2cm,
-  [#strong[Rechnung:] #text(fill: cyan)[#rechnung_nr]],
-  [#strong[Datum:] #text(fill: cyan)[#datum]],
-)
-
-#v(0.5cm)
-
-// === HINWEIS BANKVERBINDUNG ===
-#box(width: 100%, fill: rgb("#fff3cd"), inset: 8pt, radius: 3pt)[
-  #text(size: 9pt)[
-    *ACHTUNG!* Bitte berücksichtigen Sie die Bankverbindung: IBAN #bank_iban \\
-    #text(size: 8pt, fill: gray)[#bank_hinweis]
-  ]
-]
-
-#v(0.5cm)
-
-// === ANSCHREIBEN ===
-Sehr geehrte Damen und Herren!
-
-Bezugnehmend auf den Projektvertrag Nr. #strong[#projekt_nr] erlauben wir uns unter Beilage des Leistungsscheines folgende Positionen in Rechnung zu stellen:
-
-#v(0.3cm)
-
+    # VAT-Box generieren
+    vat_box = ""
+    if vat_note:
+        if is_en:
+            vat_box = f'''
 #box(width: 100%, fill: rgb("#f0f0f0"), inset: 8pt, radius: 3pt)[
   #text(size: 9pt)[
-    *Hinweis zur Umsatzsteuer:* Steuerschuldnerschaft des Leistungsempfängers \\
-    (Reverse Charge gem. Art. 196 der Richtlinie 2006/112/EG – MwStSystRL)
+    *VAT Note:* {vat_note}
   ]
 ]
 
 #v(0.5cm)
-
-// === POSITIONSTABELLE ===
-#let gesamt = positionen.map(p => p.at(1) * p.at(3)).sum()
-
-#table(
-  columns: (2fr, 1fr, 1fr, 1fr),
-  align: (left, right, right, right),
-  stroke: 0.5pt + gray,
-  inset: 8pt,
-  table.header([*Beschreibung*], [*Menge*], [*Einzelpreis*], [*Betrag*]),
-  ..positionen.map(p => {{
-    let betrag = p.at(1) * p.at(3)
-    (p.at(0), [#p.at(1) #p.at(2)], [à EUR #str(p.at(3))], [EUR #str(calc.round(betrag, digits: 2))])
-  }}).flatten(),
-  table.cell(colspan: 3, align: right)[*Gesamt (netto)*],
-  [*EUR #str(calc.round(gesamt, digits: 2))*],
-)
-
-#v(0.3cm)
-
-#text(size: 9pt, fill: gray)[
-  Kein Ausweis von Umsatzsteuer – Leistungsempfänger schuldet die Steuer \\
-  Kunden-USt-IdNr.: #kunde_ust_id
+'''
+        else:
+            vat_box = f'''
+#box(width: 100%, fill: rgb("#f0f0f0"), inset: 8pt, radius: 3pt)[
+  #text(size: 9pt)[
+    *Hinweis zur Umsatzsteuer:* {vat_note}
+  ]
 ]
 
 #v(0.5cm)
-
-Wir bedanken uns für das Vertrauen und sehen der Begleichung des Rechnungsbetrages entgegen.
-
-Für die gegenständliche Rechnung:
-- #skonto_text
-
-#v(1cm)
-
-Mit freundlichen Grüßen,
-
-#v(1.5cm)
-
-#line(length: 5cm, stroke: 0.5pt + gray)
-#text(size: 8pt, fill: gray)[Autorisierte Unterschrift]
-
-#v(0.5cm)
-
-*Anlage:*
-- Leistungsschein
-- Digitale Signatur
 '''
 
+    # Kunden-VAT-ID Zeile
+    customer_vat_line = ""
+    if region["vat_required"] and kunde.get("ust_id"):
+        customer_vat_line = f'{texts["vat_label"]}: {kunde.get("ust_id", "")}'
 
-def generiere_rechnung_en_eu(invoice_nr, date, customer, line_items):
-    """Generates English EU invoice with Art. 196"""
-    items_code = "(\n"
-    for item in line_items:
-        items_code += f'  ("{item[0]}", {item[1]:.2f}, "{item[2]}", {item[3]:.2f}),\n'
-    items_code += ")"
+    # Footer VAT-Hinweis
+    footer_vat = ""
+    if texts["no_vat"]:
+        footer_vat = f'''
+#text(size: 9pt, fill: gray)[
+  {texts["no_vat"]} \\\\
+  {texts["vat_label"]}: {kunde.get("ust_id", "")}
+]
+'''
 
     return f'''// =============================================================================
-// BLAUWEISS-EDV LLC – Invoice {invoice_nr}
+// BLAUWEISS-EDV LLC – {texts["invoice"]} {rechnung_nr}
 // Generated {datetime.now().strftime("%Y-%m-%d %H:%M")}
-// VAT Reverse Charge per Article 196 of Directive 2006/112/EC
+// Region: {region["name"]} | Language: {LANGUAGES[lang_key]["name"]}
 // =============================================================================
 
-// === INVOICE DATA ===
-#let invoice_nr = "{invoice_nr}"
-#let invoice_date = "{date}"
-#let project_nr = "{customer.get('projekt_nr', '')}"
+// === DATA ===
+#let invoice_nr = "{rechnung_nr}"
+#let invoice_date = "{datum}"
+#let project_nr = "{kunde.get('projekt_nr', '')}"
+#let currency = "{currency}"
 
 // Customer
-#let customer_name = "{customer['name']}"
-#let customer_address = "{customer['adresse']}"
-#let customer_city = "{customer['plz_ort']}"
-#let customer_country = "{customer.get('land', '')}"
-#let customer_reg_nr = "{customer.get('hrb', '')}"
-#let customer_vat_id = "{customer.get('ust_id', '')}"
+#let customer_name = "{kunde['name']}"
+#let customer_address = "{kunde['adresse']}"
+#let customer_city = "{kunde['plz_ort']}"
+#let customer_country = "{kunde.get('land', '')}"
+#let customer_reg = "{kunde.get('hrb', '')}"
+#let customer_vat = "{kunde.get('ust_id', '')}"
 
 // Line items
-#let line_items = {items_code}
-
-// Payment terms
-#let discount_text = "3% discount for immediate payment (1-2 days)"
+#let items = {pos_code}
 
 // === COMPANY DATA ===
 #let company_name = "BLAUWEISS-EDV LLC"
@@ -461,198 +401,11 @@ def generiere_rechnung_en_eu(invoice_nr, date, customer, line_items):
 #let company_email = "info@blauweiss-edv.com"
 #let company_web = "www.blauweiss-edv.com"
 
-// Bank details
+// Bank
 #let bank_name = "Raiba St. Florian/Schärding"
 #let bank_iban = "AT46 2032 6000 0007 0623"
 #let bank_bic = "RZOOAT2L522"
-#let bank_note = "Payments held in trust by M. Matejka until US company account is opened"
-
-// === COLORS ===
-#let blue = rgb("#1e5a99")
-#let cyan = rgb("#00b4d8")
-#let light_cyan = rgb("#e0f7fa")
-
-// === PAGE SETUP ===
-#set page(
-  paper: "a4",
-  margin: (top: 2.5cm, bottom: 3cm, left: 2cm, right: 1.5cm),
-  footer: [
-    #set text(size: 8pt, fill: gray)
-    #line(length: 100%, stroke: 0.5pt + gray)
-    #v(3pt)
-    #grid(
-      columns: (1fr, 1fr, 1fr),
-      align: (left, center, right),
-      [#bank_name | BIC: #bank_bic],
-      [IBAN: #bank_iban],
-      [#company_web],
-    )
-  ]
-)
-
-#set text(font: "Inter", size: 10pt)
-
-// === HEADER ===
-#grid(
-  columns: (1fr, auto),
-  gutter: 1cm,
-  [#image("logo-blauweiss.png", width: 6cm)],
-  [
-    #box(fill: light_cyan, inset: 10pt, radius: 3pt)[
-      #set text(size: 9pt)
-      #strong[#company_name]
-      
-      #company_address \\
-      #company_city \\
-      #company_country
-      
-      #v(0.3cm)
-      #text(fill: cyan)[#company_phone] \\
-      #text(fill: cyan)[#company_email]
-    ]
-  ]
-)
-
-#v(1cm)
-
-// === CUSTOMER ADDRESS ===
-#customer_name \\
-#customer_address \\
-#customer_city \\
-#customer_country \\
-#customer_reg_nr \\
-VAT ID: #customer_vat_id
-
-#v(1cm)
-
-// === INVOICE TITLE ===
-#grid(
-  columns: (auto, auto),
-  gutter: 2cm,
-  [#strong[Invoice:] #text(fill: cyan)[#invoice_nr]],
-  [#strong[Date:] #text(fill: cyan)[#invoice_date]],
-)
-
-#v(0.5cm)
-
-#box(width: 100%, fill: rgb("#fff3cd"), inset: 8pt, radius: 3pt)[
-  #text(size: 9pt)[
-    *ATTENTION!* Please note the bank details: IBAN #bank_iban \\
-    #text(size: 8pt, fill: gray)[#bank_note]
-  ]
-]
-
-#v(0.5cm)
-
-Dear Sir or Madam,
-
-With reference to project contract no. #strong[#project_nr], we hereby invoice the following services:
-
-#v(0.3cm)
-
-#box(width: 100%, fill: rgb("#f0f0f0"), inset: 8pt, radius: 3pt)[
-  #text(size: 9pt)[
-    *VAT Note:* VAT reverse charge – customer to account for VAT \\
-    (per Article 196 of Directive 2006/112/EC)
-  ]
-]
-
-#v(0.5cm)
-
-// === LINE ITEMS ===
-#let total = line_items.map(p => p.at(1) * p.at(3)).sum()
-
-#table(
-  columns: (2fr, 1fr, 1fr, 1fr),
-  align: (left, right, right, right),
-  stroke: 0.5pt + gray,
-  inset: 8pt,
-  table.header([*Description*], [*Quantity*], [*Unit Price*], [*Amount*]),
-  ..line_items.map(p => {{
-    let amount = p.at(1) * p.at(3)
-    (p.at(0), [#p.at(1) #p.at(2)], [EUR #str(p.at(3))], [EUR #str(calc.round(amount, digits: 2))])
-  }}).flatten(),
-  table.cell(colspan: 3, align: right)[*Total (net)*],
-  [*EUR #str(calc.round(total, digits: 2))*],
-)
-
-#v(0.3cm)
-
-#text(size: 9pt, fill: gray)[
-  No VAT charged – reverse charge applies, customer is liable for VAT \\
-  Customer VAT ID: #customer_vat_id
-]
-
-#v(0.5cm)
-
-We thank you for your trust. Please remit the invoice amount to the bank account stated above.
-
-For this invoice:
-- #discount_text
-
-#v(1cm)
-
-Kind regards,
-
-#v(1.5cm)
-
-#line(length: 5cm, stroke: 0.5pt + gray)
-#text(size: 8pt, fill: gray)[Authorized Signature]
-
-#v(0.5cm)
-
-*Enclosure:*
-- Service Report
-- Digital Signature
-'''
-
-
-def generiere_rechnung_en_us(invoice_nr, date, customer, line_items):
-    """Generates English US invoice (no VAT)"""
-    items_code = "(\n"
-    for item in line_items:
-        items_code += f'  ("{item[0]}", {item[1]:.2f}, "{item[2]}", {item[3]:.2f}),\n'
-    items_code += ")"
-
-    return f'''// =============================================================================
-// BLAUWEISS-EDV LLC – Invoice {invoice_nr}
-// Generated {datetime.now().strftime("%Y-%m-%d %H:%M")}
-// US Domestic Invoice (no VAT applicable)
-// =============================================================================
-
-// === INVOICE DATA ===
-#let invoice_nr = "{invoice_nr}"
-#let invoice_date = "{date}"
-#let project_nr = "{customer.get('projekt_nr', '')}"
-
-// Customer
-#let customer_name = "{customer['name']}"
-#let customer_address = "{customer['adresse']}"
-#let customer_city = "{customer['plz_ort']}"
-#let customer_country = "{customer.get('land', 'USA')}"
-
-// Line items
-#let line_items = {items_code}
-
-// Payment terms
-#let payment_terms = "Net 30"
-#let discount_text = "3% discount for payment within 5 days"
-
-// === COMPANY DATA ===
-#let company_name = "BLAUWEISS-EDV LLC"
-#let company_address = "106 Stratford St"
-#let company_city = "Houston, TX 77006"
-#let company_country = "USA"
-#let company_phone = "+1 832 517 1100"
-#let company_email = "info@blauweiss-edv.com"
-#let company_web = "www.blauweiss-edv.com"
-#let company_ein = "XX-XXXXXXX"
-
-// Bank details
-#let bank_name = "Raiba St. Florian/Schärding"
-#let bank_iban = "AT46 2032 6000 0007 0623"
-#let bank_bic = "RZOOAT2L522"
-#let bank_note = "Payments held in trust by M. Matejka until US company account is opened"
+#let bank_note = "{"Payments held in trust by M. Matejka until US company account is opened" if is_en else "Zahlungen treuhänderisch an M. Matejka bis Eröffnung US-Firmenkontos"}"
 
 // === COLORS ===
 #let cyan = rgb("#00b4d8")
@@ -688,187 +441,187 @@ def generiere_rechnung_en_us(invoice_nr, date, customer, line_items):
       #set text(size: 9pt)
       #strong[#company_name]
       
-      #company_address \\
-      #company_city \\
+      #company_address \\\\
+      #company_city \\\\
       #company_country
       
       #v(0.3cm)
-      #text(fill: cyan)[#company_phone] \\
+      #text(fill: cyan)[#company_phone] \\\\
       #text(fill: cyan)[#company_email]
-      
-      #v(0.2cm)
-      #text(size: 8pt)[EIN: #company_ein]
     ]
   ]
 )
 
 #v(1cm)
 
-// === CUSTOMER ADDRESS ===
-#strong[Bill To:]
-
-#customer_name \\
-#customer_address \\
-#customer_city \\
-#customer_country
+// === CUSTOMER ===
+#customer_name \\\\
+#customer_address \\\\
+#customer_city \\\\
+#customer_country \\\\
+#customer_reg \\\\
+{customer_vat_line}
 
 #v(1cm)
 
-// === INVOICE TITLE ===
+// === TITLE ===
 #grid(
-  columns: (auto, auto, auto),
-  gutter: 1.5cm,
-  [#strong[Invoice:] #text(fill: cyan)[#invoice_nr]],
-  [#strong[Date:] #text(fill: cyan)[#invoice_date]],
-  [#strong[Terms:] #payment_terms],
+  columns: (auto, auto),
+  gutter: 2cm,
+  [#strong[{texts["invoice"]}:] #text(fill: cyan)[#invoice_nr]],
+  [#strong[{texts["date"]}:] #text(fill: cyan)[#invoice_date]],
 )
 
 #v(0.5cm)
 
+// === BANK NOTICE ===
 #box(width: 100%, fill: rgb("#fff3cd"), inset: 8pt, radius: 3pt)[
   #text(size: 9pt)[
-    *Payment Information:* Please remit to IBAN #bank_iban (BIC: #bank_bic) \\
+    *{texts["attention"]}* {texts["bank_note"]} IBAN #bank_iban \\\\
     #text(size: 8pt, fill: gray)[#bank_note]
   ]
 ]
 
 #v(0.5cm)
 
-Dear Sir or Madam,
+// === LETTER ===
+{texts["greeting"]}
 
-With reference to project contract no. #strong[#project_nr], please find below our invoice for services rendered:
-
-#v(0.5cm)
-
-// === LINE ITEMS ===
-#let total = line_items.map(p => p.at(1) * p.at(3)).sum()
+{texts["intro"]} #strong[#project_nr]{texts["intro2"]}
+{vat_box}
+// === TABLE ===
+#let total = items.map(p => p.at(1) * p.at(3)).sum()
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr),
   align: (left, right, right, right),
   stroke: 0.5pt + gray,
   inset: 8pt,
-  table.header([*Description*], [*Quantity*], [*Unit Price*], [*Amount*]),
-  ..line_items.map(p => {{
-    let amount = p.at(1) * p.at(3)
-    (p.at(0), [#p.at(1) #p.at(2)], [USD #str(p.at(3))], [USD #str(calc.round(amount, digits: 2))])
+  table.header([*{texts["description"]}*], [*{texts["quantity"]}*], [*{texts["unit_price"]}*], [*{texts["amount"]}*]),
+  ..items.map(p => {{
+    let amt = p.at(1) * p.at(3)
+    (p.at(0), [#p.at(1) #p.at(2)], [#currency #str(p.at(3))], [#currency #str(calc.round(amt, digits: 2))])
   }}).flatten(),
-  table.cell(colspan: 3, align: right)[*Total Due*],
-  [*USD #str(calc.round(total, digits: 2))*],
+  table.cell(colspan: 3, align: right)[*{texts["total"]}*],
+  [*#currency #str(calc.round(total, digits: 2))*],
 )
 
+#v(0.3cm)
+{footer_vat}
 #v(0.5cm)
 
-Payment is due within 30 days of invoice date.
+{texts["thanks"]}
 
-- #discount_text
+- {texts["discount"]}
 
 #v(1cm)
 
-Thank you for your business!
+{texts["regards"]}
 
 #v(1.5cm)
 
 #line(length: 5cm, stroke: 0.5pt + gray)
-#text(size: 8pt, fill: gray)[Authorized Signature]
+#text(size: 8pt, fill: gray)[{texts["signature"]}]
 
 #v(0.5cm)
 
-*Enclosure:*
-- Service Report
+*{texts["enclosure"]}*
+- {texts["service_report"]}
+- {texts["digital_sig"]}
 '''
-
-
-def format_datum_de():
-    """Gibt aktuelles Datum auf Deutsch formatiert zurück"""
-    datum = datetime.now().strftime("%d. %B %Y")
-    for en, de in MONATE_DE.items():
-        datum = datum.replace(en, de)
-    return datum
 
 
 def main():
     print("=" * 60)
-    print("🧾 BLAUWEISS-EDV LLC – Invoice Generator (Multilingual)")
+    print("🧾 BLAUWEISS-EDV LLC – Invoice Generator")
+    print("   Source: USA → Destination: ???")
     print("=" * 60)
 
     # Prüfen ob Template existiert
     if not TEMPLATE_DIR.exists():
         print(f"\n❌ Template folder not found: {TEMPLATE_DIR}")
-        print("   Please run from the corporate repository!")
         sys.exit(1)
 
-    # 1. Rechnungstyp wählen
-    inv_type, typ_info = waehle_typ()
-    currency = typ_info["currency"]
-    is_english = inv_type.startswith("en")
+    # 1. Zielregion wählen (steuerliche Behandlung)
+    region_key, region = waehle_region()
+    
+    # 2. Sprache wählen
+    lang_key, lang = waehle_sprache()
+    is_en = lang_key == "en"
+    
+    # 3. Währung
+    currency = region["default_currency"]
+    new_currency = frage(
+        f"\n💱 {'Currency' if is_en else 'Währung'}", 
+        currency
+    )
+    if new_currency:
+        currency = new_currency.upper()
 
-    # 2. Rechnungsdaten sammeln
-    if is_english:
-        print("\n📄 Invoice data:")
-        rechnung_nr = frage("   Invoice number", f"OP_AR{datetime.now().strftime('%j')}_{datetime.now().year}")
-        datum = frage("   Date", datetime.now().strftime("%B %d, %Y"))
-    else:
-        print("\n📄 Rechnungsdaten:")
-        rechnung_nr = frage("   Rechnungsnummer", f"OP_AR{datetime.now().strftime('%j')}_{datetime.now().year}")
-        datum = frage("   Datum", format_datum_de())
+    # 4. Rechnungsdaten
+    print(f"\n📄 {'Invoice data' if is_en else 'Rechnungsdaten'}:")
+    rechnung_nr = frage(
+        f"   {'Invoice number' if is_en else 'Rechnungsnummer'}", 
+        f"OP_AR{datetime.now().strftime('%j')}_{datetime.now().year}"
+    )
+    datum = frage(
+        f"   {'Date' if is_en else 'Datum'}", 
+        format_datum(lang_key)
+    )
 
-    # 3. Kunde wählen
-    kunde, kunde_key = waehle_kunde(inv_type)
+    # 5. Kunde wählen
+    kunde, kunde_key = waehle_kunde(region_key, lang_key)
 
-    # 4. Positionen
-    positionen = positionen_eingeben(inv_type)
+    # 6. Positionen
+    positionen = positionen_eingeben(lang_key, currency)
 
     if not positionen:
-        print("\n❌ No line items entered!" if is_english else "\n❌ Keine Positionen eingegeben!")
+        print(f"\n❌ {'No line items!' if is_en else 'Keine Positionen!'}")
         sys.exit(1)
 
-    # 5. Zusammenfassung
+    # 7. Zusammenfassung
     gesamt = sum(p[1] * p[3] for p in positionen)
     print("\n" + "=" * 60)
-    print("📋 SUMMARY" if is_english else "📋 ZUSAMMENFASSUNG")
+    print(f"📋 {'SUMMARY' if is_en else 'ZUSAMMENFASSUNG'}")
     print("=" * 60)
-    print(f"   {'Invoice' if is_english else 'Rechnung'}:  {rechnung_nr}")
-    print(f"   {'Date' if is_english else 'Datum'}:     {datum}")
-    print(f"   {'Customer' if is_english else 'Kunde'}:  {kunde['name']}")
-    if typ_info["vat_required"]:
-        print(f"   {'VAT ID' if is_english else 'USt-IdNr.'}:  {kunde.get('ust_id', 'N/A')}")
-    print(f"   {'Line items' if is_english else 'Positionen'}:")
+    print(f"   {'Region' if is_en else 'Region'}:    {region['name']}")
+    print(f"   {'Language' if is_en else 'Sprache'}:  {lang['name']}")
+    print(f"   {'Invoice' if is_en else 'Rechnung'}: {rechnung_nr}")
+    print(f"   {'Date' if is_en else 'Datum'}:     {datum}")
+    print(f"   {'Customer' if is_en else 'Kunde'}:   {kunde['name']}")
+    if region["vat_required"]:
+        print(f"   {'VAT ID' if is_en else 'USt-IdNr.'}:  {kunde.get('ust_id', 'N/A')}")
+    print(f"   {'Items' if is_en else 'Positionen'}:")
     for pos in positionen:
         print(f"      - {pos[0]}: {pos[1]} {pos[2]} × {currency} {pos[3]} = {currency} {pos[1] * pos[3]:.2f}")
-    print(f"   {'TOTAL' if is_english else 'GESAMT'}:    {currency} {gesamt:.2f}")
-    if typ_info["vat_note"]:
-        print(f"   VAT: {typ_info['vat_note']}")
+    print(f"   {'TOTAL' if is_en else 'GESAMT'}:    {currency} {gesamt:.2f}")
+    if region["vat_note_en" if is_en else "vat_note_de"]:
+        print(f"   VAT: {region['vat_note_en' if is_en else 'vat_note_de']}")
     print("=" * 60)
 
-    # 6. Bestätigung
-    confirm_prompt = "\nCreate invoice? (Y/n): " if is_english else "\nRechnung erstellen? (J/n): "
-    if input(confirm_prompt).strip().lower() == 'n':
-        print("❌ Cancelled." if is_english else "❌ Abgebrochen.")
+    # 8. Bestätigung
+    confirm = input(f"\n{'Create invoice? (Y/n)' if is_en else 'Rechnung erstellen? (J/n)'}: ").strip().lower()
+    if confirm == 'n':
+        print(f"❌ {'Cancelled.' if is_en else 'Abgebrochen.'}")
         sys.exit(0)
 
-    # 7. Dateiname generieren
+    # 9. Dateiname
     datum_kurz = datetime.now().strftime("%Y-%m-%d")
     kunde_kurz = kunde_key if kunde_key != "neu" else kunde['name'].split()[0].lower()
-    prefix = "Invoice" if is_english else "Rechnung"
-    dateiname = f"{datum_kurz}_{prefix}_{kunde_kurz}_{rechnung_nr.replace('OP_', '')}.typ"
+    prefix = "Invoice" if is_en else "Rechnung"
+    dateiname = f"{datum_kurz}_{prefix}_{kunde_kurz}_{rechnung_nr.replace('OP_', '')}_{lang_key}.typ"
     dateipfad = TEMPLATE_DIR / dateiname
 
-    # 8. Generieren
-    if inv_type == "de-eu":
-        inhalt = generiere_rechnung_de_eu(rechnung_nr, datum, kunde, positionen)
-    elif inv_type == "en-eu":
-        inhalt = generiere_rechnung_en_eu(rechnung_nr, datum, kunde, positionen)
-    else:  # en-us
-        inhalt = generiere_rechnung_en_us(rechnung_nr, datum, kunde, positionen)
+    # 10. Generieren
+    inhalt = generiere_typst_code(rechnung_nr, datum, kunde, positionen, region_key, lang_key, currency)
 
     with open(dateipfad, 'w', encoding='utf-8') as f:
         f.write(inhalt)
 
-    print(f"\n✅ {'Invoice created' if is_english else 'Rechnung erstellt'}: {dateipfad}")
+    print(f"\n✅ {'Invoice created' if is_en else 'Rechnung erstellt'}: {dateipfad}")
 
-    # 9. Optional: Direkt committen?
-    commit_prompt = "\nCommit and push now? (Y/n): " if is_english else "\nJetzt committen und pushen? (J/n): "
+    # 11. Git commit?
+    commit_prompt = f"\n{'Commit and push? (Y/n)' if is_en else 'Committen und pushen? (J/n)'}: "
     if input(commit_prompt).strip().lower() != 'n':
         repo_root = Path(__file__).parent.resolve()
 
@@ -878,7 +631,7 @@ def main():
 
             print("⏳ Git commit...")
             subprocess.run(
-                ['git', 'commit', '-m', f'{prefix} {rechnung_nr} for {kunde["name"]}'],
+                ['git', 'commit', '-m', f'{prefix} {rechnung_nr} for {kunde["name"]} ({region_key.upper()}/{lang_key.upper()})'],
                 cwd=repo_root,
                 check=True
             )
@@ -886,10 +639,9 @@ def main():
             print("⏳ Git push...")
             subprocess.run(['git', 'push', 'origin', 'main'], cwd=repo_root, check=True)
 
-            print(f"\n🚀 {'Pushed! Pipeline running...' if is_english else 'Gepusht! Pipeline läuft...'}")
+            print(f"\n🚀 {'Pushed! Pipeline running...' if is_en else 'Gepusht! Pipeline läuft...'}")
         except subprocess.CalledProcessError as e:
             print(f"\n❌ Git error: {e}")
-            print("   Please commit manually:")
             print(f"   git add '{dateipfad}'")
             print(f"   git commit -m '{prefix} {rechnung_nr}'")
             print("   git push origin main")
