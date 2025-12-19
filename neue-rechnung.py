@@ -4,14 +4,13 @@ BLAUWEISS-EDV LLC – Rechnungsgenerator
 Erstellt eine neue Rechnung aus dem Typst-Template
 """
 
-import os
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
 # Pfad zum Template-Ordner
 TEMPLATE_DIR = Path(__file__).parent / "finance/templates/invoices/typst"
-TEMPLATE_FILE = TEMPLATE_DIR / "rechnung-template.typ"
 
 # Vordefinierte Kunden (können erweitert werden)
 KUNDEN = {
@@ -26,6 +25,7 @@ KUNDEN = {
     # Weitere Kunden hier hinzufügen...
 }
 
+
 def frage(text, default=None):
     """Fragt nach Eingabe mit optionalem Default-Wert"""
     if default:
@@ -37,6 +37,7 @@ def frage(text, default=None):
             if eingabe:
                 return eingabe
             print("  ⚠️  Bitte einen Wert eingeben!")
+
 
 def frage_zahl(text, default=None):
     """Fragt nach einer Zahl"""
@@ -51,25 +52,27 @@ def frage_zahl(text, default=None):
         except ValueError:
             print("  ⚠️  Bitte eine gültige Zahl eingeben!")
 
+
 def waehle_kunde():
     """Lässt den Benutzer einen Kunden wählen oder neu eingeben"""
     print("\n📋 Verfügbare Kunden:")
     for i, (key, kunde) in enumerate(KUNDEN.items(), 1):
         print(f"   {i}. {kunde['name']} ({key})")
-    print(f"   {len(KUNDEN)+1}. Neuen Kunden eingeben")
-    
+    print(f"   {len(KUNDEN) + 1}. Neuen Kunden eingeben")
+
     while True:
         try:
             wahl = int(input("\nKunde wählen (Nummer): "))
             if 1 <= wahl <= len(KUNDEN):
-                key = list(KUNDEN.keys())[wahl-1]
+                key = list(KUNDEN.keys())[wahl - 1]
                 return KUNDEN[key], key
-            elif wahl == len(KUNDEN)+1:
+            elif wahl == len(KUNDEN) + 1:
                 return kunde_eingeben(), "neu"
             else:
                 print("  ⚠️  Ungültige Auswahl!")
         except ValueError:
             print("  ⚠️  Bitte eine Nummer eingeben!")
+
 
 def kunde_eingeben():
     """Neuen Kunden manuell eingeben"""
@@ -83,22 +86,23 @@ def kunde_eingeben():
         "projekt_nr": frage("   Projekt-Nr.", ""),
     }
 
+
 def positionen_eingeben():
     """Fragt nach den Rechnungspositionen"""
     print("\n💰 Positionen eingeben:")
-    
+
     remote_stunden = frage_zahl("   Remote-Stunden", 0)
     remote_preis = frage_zahl("   Remote-Stundensatz (EUR)", 105)
-    
+
     onsite_stunden = frage_zahl("   Onsite-Stunden", 0)
     onsite_preis = frage_zahl("   Onsite-Stundensatz (EUR)", 120)
-    
+
     positionen = []
     if remote_stunden > 0:
         positionen.append(("Beratungsleistung remote", remote_stunden, "Ph", remote_preis))
     if onsite_stunden > 0:
         positionen.append(("Beratungsleistung on-site", onsite_stunden, "Ph", onsite_preis))
-    
+
     # Weitere Positionen?
     while True:
         weitere = input("\n   Weitere Position hinzufügen? (j/N): ").strip().lower()
@@ -110,18 +114,19 @@ def positionen_eingeben():
             positionen.append((beschreibung, menge, einheit, preis))
         else:
             break
-    
+
     return positionen
+
 
 def generiere_rechnung(rechnung_nr, datum, kunde, positionen):
     """Generiert die Typst-Datei"""
-    
+
     # Positionen als Typst-Code formatieren
     pos_code = "(\n"
     for pos in positionen:
         pos_code += f'  ("{pos[0]}", {pos[1]:.2f}, "{pos[2]}", {pos[3]:.2f}),\n'
     pos_code += ")"
-    
+
     inhalt = f'''// =============================================================================
 // BLAUWEISS-EDV LLC – Rechnung {rechnung_nr}
 // Generiert am {datetime.now().strftime("%Y-%m-%d %H:%M")}
@@ -184,7 +189,7 @@ def generiere_rechnung(rechnung_nr, datum, kunde, positionen):
   ]
 )
 
-#set text(font: "Helvetica", size: 10pt)
+#set text(font: "Inter", size: 10pt)
 
 // === HEADER MIT LOGO ===
 #grid(
@@ -203,11 +208,11 @@ def generiere_rechnung(rechnung_nr, datum, kunde, positionen):
     )[
       #set text(size: 9pt)
       #strong[#firma_name]
-      
+
       #firma_adresse \\
       #firma_plz_ort \\
       #firma_land
-      
+
       #v(0.3cm)
       #text(fill: cyan)[#firma_telefon] \\
       #text(fill: cyan)[#firma_email]
@@ -266,12 +271,12 @@ Bezugnehmend auf den Projektvertrag Nr. #strong[#projekt_nr] erlauben wir uns un
   align: (left, right, right, right),
   stroke: 0.5pt + gray,
   inset: 8pt,
-  
+
   // Header
   table.header(
     [*Beschreibung*], [*Menge*], [*Einzelpreis*], [*Betrag*],
   ),
-  
+
   // Positionen
   ..positionen.map(p => {{
     let betrag = p.at(1) * p.at(3)
@@ -282,7 +287,7 @@ Bezugnehmend auf den Projektvertrag Nr. #strong[#projekt_nr] erlauben wir uns un
       [EUR #str(calc.round(betrag, digits: 2))],
     )
   }}).flatten(),
-  
+
   // Summe
   table.cell(colspan: 3, align: right)[*Gesamt*],
   [*EUR #str(calc.round(gesamt, digits: 2))*],
@@ -314,32 +319,39 @@ Mit freundlichen Grüßen,
 '''
     return inhalt
 
+
 def main():
     print("=" * 60)
     print("🧾 BLAUWEISS-EDV LLC – Rechnungsgenerator")
     print("=" * 60)
-    
+
     # Prüfen ob Template existiert
     if not TEMPLATE_DIR.exists():
         print(f"\n❌ Template-Ordner nicht gefunden: {TEMPLATE_DIR}")
         print("   Bitte aus dem corporate-Repository ausführen!")
         sys.exit(1)
-    
+
     # Rechnungsdaten sammeln
     print("\n📄 Rechnungsdaten:")
     rechnung_nr = frage("   Rechnungsnummer", f"OP_AR{datetime.now().strftime('%j')}_{datetime.now().year}")
-    datum = frage("   Datum", datetime.now().strftime("%d. %B %Y").replace("January", "Januar").replace("February", "Februar").replace("March", "März").replace("April", "April").replace("May", "Mai").replace("June", "Juni").replace("July", "Juli").replace("August", "August").replace("September", "September").replace("October", "Oktober").replace("November", "November").replace("December", "Dezember"))
-    
+    datum = frage("   Datum", datetime.now().strftime("%d. %B %Y").replace("January", "Januar").replace("February",
+                                                                                                        "Februar").replace(
+        "March", "März").replace("April", "April").replace("May", "Mai").replace("June", "Juni").replace("July",
+                                                                                                         "Juli").replace(
+        "August", "August").replace("September", "September").replace("October", "Oktober").replace("November",
+                                                                                                    "November").replace(
+        "December", "Dezember"))
+
     # Kunde wählen
     kunde, kunde_key = waehle_kunde()
-    
+
     # Positionen
     positionen = positionen_eingeben()
-    
+
     if not positionen:
         print("\n❌ Keine Positionen eingegeben!")
         sys.exit(1)
-    
+
     # Zusammenfassung
     gesamt = sum(p[1] * p[3] for p in positionen)
     print("\n" + "=" * 60)
@@ -350,41 +362,60 @@ def main():
     print(f"   Kunde:     {kunde['name']}")
     print(f"   Positionen:")
     for pos in positionen:
-        print(f"      - {pos[0]}: {pos[1]} {pos[2]} × €{pos[3]} = €{pos[1]*pos[3]:.2f}")
+        print(f"      - {pos[0]}: {pos[1]} {pos[2]} × €{pos[3]} = €{pos[1] * pos[3]:.2f}")
     print(f"   GESAMT:    €{gesamt:.2f}")
     print("=" * 60)
-    
+
     # Bestätigung
     if input("\nRechnung erstellen? (J/n): ").strip().lower() == 'n':
         print("❌ Abgebrochen.")
         sys.exit(0)
-    
+
     # Dateiname generieren
     datum_kurz = datetime.now().strftime("%Y-%m-%d")
     kunde_kurz = kunde_key if kunde_key != "neu" else kunde['name'].split()[0].lower()
     dateiname = f"{datum_kurz}_Invoice_{kunde_kurz}_{rechnung_nr.replace('OP_', '')}.typ"
     dateipfad = TEMPLATE_DIR / dateiname
-    
+
     # Generieren
     inhalt = generiere_rechnung(rechnung_nr, datum, kunde, positionen)
-    
+
     with open(dateipfad, 'w', encoding='utf-8') as f:
         f.write(inhalt)
-    
+
     print(f"\n✅ Rechnung erstellt: {dateipfad}")
     print("\n📌 Nächste Schritte:")
     print(f"   1. git add {dateipfad}")
     print(f"   2. git commit -m 'Invoice {rechnung_nr}'")
     print(f"   3. git push origin main")
     print("   4. Pipeline generiert PDF → Git + Google Drive")
-    
+
     # Optional: Direkt committen?
     if input("\nJetzt committen und pushen? (J/n): ").strip().lower() != 'n':
-        os.chdir(TEMPLATE_DIR.parent.parent.parent.parent)  # zum repo root
-        os.system(f'git add "{dateipfad}"')
-        os.system(f'git commit -m "Invoice {rechnung_nr} for {kunde["name"]}"')
-        os.system('git push origin main')
-        print("\n🚀 Gepusht! Pipeline läuft...")
+        repo_root = Path(__file__).parent.resolve()
+
+        try:
+            print("\n⏳ Git add...")
+            subprocess.run(['git', 'add', str(dateipfad)], cwd=repo_root, check=True)
+
+            print("⏳ Git commit...")
+            subprocess.run(
+                ['git', 'commit', '-m', f'Invoice {rechnung_nr} for {kunde["name"]}'],
+                cwd=repo_root,
+                check=True
+            )
+
+            print("⏳ Git push...")
+            subprocess.run(['git', 'push', 'origin', 'main'], cwd=repo_root, check=True)
+
+            print("\n🚀 Gepusht! Pipeline läuft...")
+        except subprocess.CalledProcessError as e:
+            print(f"\n❌ Git-Fehler: {e}")
+            print("   Bitte manuell committen und pushen:")
+            print(f"   git add '{dateipfad}'")
+            print(f"   git commit -m 'Invoice {rechnung_nr}'")
+            print("   git push origin main")
+
 
 if __name__ == "__main__":
     main()
