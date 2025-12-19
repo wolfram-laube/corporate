@@ -7,8 +7,16 @@ Steuerliche Behandlung (Quelle: USA → Ziel):
 - EU:       Reverse Charge Art. 196 MwStSystRL, USt-IdNr. Pflicht
 - USA:      Keine VAT, ggf. Sales Tax (B2B Services meist exempt)
 - Drittland: Keine EU-Reverse-Charge, lokale Regeln
+
+Usage:
+  Interactive:    python3 neue-rechnung.py
+  CLI args:       python3 neue-rechnung.py --region eu --lang de --customer nemensis --remote-hours 184
+  From JSON:      python3 neue-rechnung.py --from-file invoice-data.json
+  Dry run:        python3 neue-rechnung.py --from-file invoice-data.json --dry-run
 """
 
+import argparse
+import json
 import subprocess
 import sys
 from datetime import datetime
@@ -79,6 +87,10 @@ MONATE_DE = {
 }
 
 
+# =============================================================================
+# INTERACTIVE MODE FUNCTIONS
+# =============================================================================
+
 def frage(text, default=None, required=False):
     """Fragt nach Eingabe mit optionalem Default-Wert"""
     if default:
@@ -146,7 +158,6 @@ def waehle_sprache():
 
 def waehle_kunde(region_key, lang_key):
     """Lässt den Benutzer einen Kunden wählen oder neu eingeben"""
-    # Filter Kunden nach Region
     passende = {k: v for k, v in KUNDEN.items() if v.get("region") == region_key}
     
     print(f"\n📋 Verfügbare Kunden ({REGIONS[region_key]['name']}):")
@@ -235,7 +246,6 @@ def positionen_eingeben(lang_key, currency):
     if onsite_stunden > 0:
         positionen.append((onsite_label, onsite_stunden, unit, onsite_preis))
 
-    # Weitere Positionen?
     more_prompt = "\n   Add another item? (y/N): " if is_en else "\n   Weitere Position? (j/N): "
     while True:
         weitere = input(more_prompt).strip().lower()
@@ -250,6 +260,10 @@ def positionen_eingeben(lang_key, currency):
 
     return positionen
 
+
+# =============================================================================
+# SHARED FUNCTIONS
+# =============================================================================
 
 def format_datum(lang_key):
     """Gibt aktuelles Datum formatiert zurück"""
@@ -531,100 +545,67 @@ def generiere_typst_code(rechnung_nr, datum, kunde, positionen, region_key, lang
 '''
 
 
-def main():
-    print("=" * 60)
-    print("🧾 BLAUWEISS-EDV LLC – Invoice Generator")
-    print("   Source: USA → Destination: ???")
-    print("=" * 60)
-
-    # Prüfen ob Template existiert
-    if not TEMPLATE_DIR.exists():
-        print(f"\n❌ Template folder not found: {TEMPLATE_DIR}")
-        sys.exit(1)
-
-    # 1. Zielregion wählen (steuerliche Behandlung)
-    region_key, region = waehle_region()
-    
-    # 2. Sprache wählen
-    lang_key, lang = waehle_sprache()
+def create_invoice(region_key, lang_key, kunde, positionen, rechnung_nr, datum, currency, 
+                   dry_run=False, no_git=False, output_dir=None):
+    """Erstellt die Rechnung (shared logic für interaktiv und CLI)"""
+    region = REGIONS[region_key]
     is_en = lang_key == "en"
     
-    # 3. Währung
-    currency = region["default_currency"]
-    new_currency = frage(
-        f"\n💱 {'Currency' if is_en else 'Währung'}", 
-        currency
-    )
-    if new_currency:
-        currency = new_currency.upper()
+    # Output directory
+    if output_dir:
+        out_path = Path(output_dir)
+    else:
+        out_path = TEMPLATE_DIR
+    
+    # Dateiname
+    datum_kurz = datetime.now().strftime("%Y-%m-%d")
+    kunde_kurz = kunde.get('_key', kunde['name'].split()[0].lower())
+    prefix = "Invoice" if is_en else "Rechnung"
+    dateiname = f"{datum_kurz}_{prefix}_{kunde_kurz}_{rechnung_nr.replace('OP_', '')}_{lang_key}.typ"
+    dateipfad = out_path / dateiname
 
-    # 4. Rechnungsdaten
-    print(f"\n📄 {'Invoice data' if is_en else 'Rechnungsdaten'}:")
-    rechnung_nr = frage(
-        f"   {'Invoice number' if is_en else 'Rechnungsnummer'}", 
-        f"OP_AR{datetime.now().strftime('%j')}_{datetime.now().year}"
-    )
-    datum = frage(
-        f"   {'Date' if is_en else 'Datum'}", 
-        format_datum(lang_key)
-    )
+    # Generieren
+    inhalt = generiere_typst_code(rechnung_nr, datum, kunde, positionen, region_key, lang_key, currency)
 
-    # 5. Kunde wählen
-    kunde, kunde_key = waehle_kunde(region_key, lang_key)
-
-    # 6. Positionen
-    positionen = positionen_eingeben(lang_key, currency)
-
-    if not positionen:
-        print(f"\n❌ {'No line items!' if is_en else 'Keine Positionen!'}")
-        sys.exit(1)
-
-    # 7. Zusammenfassung
+    # Zusammenfassung
     gesamt = sum(p[1] * p[3] for p in positionen)
     print("\n" + "=" * 60)
     print(f"📋 {'SUMMARY' if is_en else 'ZUSAMMENFASSUNG'}")
     print("=" * 60)
-    print(f"   {'Region' if is_en else 'Region'}:    {region['name']}")
-    print(f"   {'Language' if is_en else 'Sprache'}:  {lang['name']}")
-    print(f"   {'Invoice' if is_en else 'Rechnung'}: {rechnung_nr}")
-    print(f"   {'Date' if is_en else 'Datum'}:     {datum}")
-    print(f"   {'Customer' if is_en else 'Kunde'}:   {kunde['name']}")
+    print(f"   Region:    {region['name']}")
+    print(f"   Language:  {LANGUAGES[lang_key]['name']}")
+    print(f"   Invoice:   {rechnung_nr}")
+    print(f"   Date:      {datum}")
+    print(f"   Customer:  {kunde['name']}")
     if region["vat_required"]:
-        print(f"   {'VAT ID' if is_en else 'USt-IdNr.'}:  {kunde.get('ust_id', 'N/A')}")
-    print(f"   {'Items' if is_en else 'Positionen'}:")
+        print(f"   VAT ID:    {kunde.get('ust_id', 'N/A')}")
+    print(f"   Items:")
     for pos in positionen:
         print(f"      - {pos[0]}: {pos[1]} {pos[2]} × {currency} {pos[3]} = {currency} {pos[1] * pos[3]:.2f}")
-    print(f"   {'TOTAL' if is_en else 'GESAMT'}:    {currency} {gesamt:.2f}")
-    if region["vat_note_en" if is_en else "vat_note_de"]:
-        print(f"   VAT: {region['vat_note_en' if is_en else 'vat_note_de']}")
+    print(f"   TOTAL:     {currency} {gesamt:.2f}")
+    if region.get("vat_note_en" if is_en else "vat_note_de"):
+        print(f"   VAT:       {region['vat_note_en' if is_en else 'vat_note_de']}")
+    print(f"   Output:    {dateipfad}")
     print("=" * 60)
 
-    # 8. Bestätigung
-    confirm = input(f"\n{'Create invoice? (Y/n)' if is_en else 'Rechnung erstellen? (J/n)'}: ").strip().lower()
-    if confirm == 'n':
-        print(f"❌ {'Cancelled.' if is_en else 'Abgebrochen.'}")
-        sys.exit(0)
+    if dry_run:
+        print("\n🔍 DRY RUN - keine Dateien erstellt")
+        print("\n--- Generated Typst Code (first 50 lines) ---")
+        for i, line in enumerate(inhalt.split('\n')[:50]):
+            print(line)
+        print("...")
+        return None
 
-    # 9. Dateiname
-    datum_kurz = datetime.now().strftime("%Y-%m-%d")
-    kunde_kurz = kunde_key if kunde_key != "neu" else kunde['name'].split()[0].lower()
-    prefix = "Invoice" if is_en else "Rechnung"
-    dateiname = f"{datum_kurz}_{prefix}_{kunde_kurz}_{rechnung_nr.replace('OP_', '')}_{lang_key}.typ"
-    dateipfad = TEMPLATE_DIR / dateiname
-
-    # 10. Generieren
-    inhalt = generiere_typst_code(rechnung_nr, datum, kunde, positionen, region_key, lang_key, currency)
-
+    # Datei schreiben
+    out_path.mkdir(parents=True, exist_ok=True)
     with open(dateipfad, 'w', encoding='utf-8') as f:
         f.write(inhalt)
 
     print(f"\n✅ {'Invoice created' if is_en else 'Rechnung erstellt'}: {dateipfad}")
 
-    # 11. Git commit?
-    commit_prompt = f"\n{'Commit and push? (Y/n)' if is_en else 'Committen und pushen? (J/n)'}: "
-    if input(commit_prompt).strip().lower() != 'n':
+    # Git commit
+    if not no_git and not dry_run:
         repo_root = Path(__file__).parent.resolve()
-
         try:
             print("\n⏳ Git add...")
             subprocess.run(['git', 'add', str(dateipfad)], cwd=repo_root, check=True)
@@ -641,10 +622,321 @@ def main():
 
             print(f"\n🚀 {'Pushed! Pipeline running...' if is_en else 'Gepusht! Pipeline läuft...'}")
         except subprocess.CalledProcessError as e:
-            print(f"\n❌ Git error: {e}")
-            print(f"   git add '{dateipfad}'")
-            print(f"   git commit -m '{prefix} {rechnung_nr}'")
-            print("   git push origin main")
+            print(f"\n⚠️  Git error: {e}")
+            print("   Datei wurde erstellt, aber nicht committed.")
+
+    return dateipfad
+
+
+# =============================================================================
+# CLI MODE
+# =============================================================================
+
+def run_cli(args):
+    """Nicht-interaktiver Modus via CLI-Argumente oder JSON"""
+    
+    # Lade von JSON-Datei wenn angegeben
+    if args.from_file:
+        with open(args.from_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        region_key = data.get('region', 'eu')
+        lang_key = data.get('lang', 'de')
+        currency = data.get('currency', REGIONS[region_key]['default_currency'])
+        rechnung_nr = data.get('invoice_nr', f"OP_AR{datetime.now().strftime('%j')}_{datetime.now().year}")
+        datum = data.get('date', format_datum(lang_key))
+        
+        # Kunde aus Datei oder vordefiniert
+        if 'customer' in data and isinstance(data['customer'], dict):
+            kunde = data['customer']
+        elif 'customer' in data and isinstance(data['customer'], str):
+            if data['customer'] in KUNDEN:
+                kunde = KUNDEN[data['customer']].copy()
+                kunde['_key'] = data['customer']
+            else:
+                print(f"❌ Unbekannter Kunde: {data['customer']}")
+                print(f"   Verfügbar: {', '.join(KUNDEN.keys())}")
+                sys.exit(1)
+        else:
+            print("❌ Kein Kunde in JSON angegeben")
+            sys.exit(1)
+        
+        # Positionen
+        positionen = []
+        is_en = lang_key == "en"
+        unit = "hrs" if is_en else "Ph"
+        
+        if data.get('remote_hours', 0) > 0:
+            label = "Remote consulting services" if is_en else "Beratungsleistung remote"
+            positionen.append((label, data['remote_hours'], unit, data.get('remote_rate', 105)))
+        
+        if data.get('onsite_hours', 0) > 0:
+            label = "On-site consulting services" if is_en else "Beratungsleistung on-site"
+            positionen.append((label, data['onsite_hours'], unit, data.get('onsite_rate', 120)))
+        
+        # Custom items
+        for item in data.get('items', []):
+            positionen.append((item['description'], item['quantity'], item.get('unit', unit), item['price']))
+    
+    else:
+        # CLI-Argumente
+        region_key = args.region
+        lang_key = args.lang
+        currency = args.currency or REGIONS[region_key]['default_currency']
+        rechnung_nr = args.invoice_nr or f"OP_AR{datetime.now().strftime('%j')}_{datetime.now().year}"
+        datum = args.date or format_datum(lang_key)
+        
+        # Kunde
+        if args.customer in KUNDEN:
+            kunde = KUNDEN[args.customer].copy()
+            kunde['_key'] = args.customer
+        else:
+            # Neuer Kunde via CLI
+            if not all([args.customer_name, args.customer_address, args.customer_city]):
+                print("❌ Für neue Kunden: --customer-name, --customer-address, --customer-city erforderlich")
+                sys.exit(1)
+            
+            kunde = {
+                'name': args.customer_name,
+                'adresse': args.customer_address,
+                'plz_ort': args.customer_city,
+                'land': args.customer_country or '',
+                'hrb': args.customer_reg or '',
+                'ust_id': args.customer_vat or '',
+                'projekt_nr': args.project_nr or '',
+                '_key': 'custom',
+            }
+        
+        # Positionen
+        positionen = []
+        is_en = lang_key == "en"
+        unit = "hrs" if is_en else "Ph"
+        
+        if args.remote_hours and args.remote_hours > 0:
+            label = "Remote consulting services" if is_en else "Beratungsleistung remote"
+            positionen.append((label, args.remote_hours, unit, args.remote_rate or 105))
+        
+        if args.onsite_hours and args.onsite_hours > 0:
+            label = "On-site consulting services" if is_en else "Beratungsleistung on-site"
+            positionen.append((label, args.onsite_hours, unit, args.onsite_rate or 120))
+    
+    if not positionen:
+        print("❌ Keine Positionen angegeben!")
+        sys.exit(1)
+    
+    # VAT-ID Check für EU
+    if REGIONS[region_key]['vat_required'] and not kunde.get('ust_id'):
+        print(f"❌ EU-Kunden benötigen USt-IdNr.!")
+        sys.exit(1)
+    
+    return create_invoice(
+        region_key=region_key,
+        lang_key=lang_key,
+        kunde=kunde,
+        positionen=positionen,
+        rechnung_nr=rechnung_nr,
+        datum=datum,
+        currency=currency,
+        dry_run=args.dry_run,
+        no_git=args.no_git,
+        output_dir=args.output_dir,
+    )
+
+
+# =============================================================================
+# INTERACTIVE MODE
+# =============================================================================
+
+def run_interactive():
+    """Interaktiver Modus"""
+    print("=" * 60)
+    print("🧾 BLAUWEISS-EDV LLC – Invoice Generator")
+    print("   Source: USA → Destination: ???")
+    print("=" * 60)
+
+    if not TEMPLATE_DIR.exists():
+        print(f"\n❌ Template folder not found: {TEMPLATE_DIR}")
+        sys.exit(1)
+
+    # 1. Zielregion
+    region_key, region = waehle_region()
+    
+    # 2. Sprache
+    lang_key, lang = waehle_sprache()
+    is_en = lang_key == "en"
+    
+    # 3. Währung
+    currency = region["default_currency"]
+    new_currency = frage(f"\n💱 {'Currency' if is_en else 'Währung'}", currency)
+    if new_currency:
+        currency = new_currency.upper()
+
+    # 4. Rechnungsdaten
+    print(f"\n📄 {'Invoice data' if is_en else 'Rechnungsdaten'}:")
+    rechnung_nr = frage(
+        f"   {'Invoice number' if is_en else 'Rechnungsnummer'}", 
+        f"OP_AR{datetime.now().strftime('%j')}_{datetime.now().year}"
+    )
+    datum = frage(f"   {'Date' if is_en else 'Datum'}", format_datum(lang_key))
+
+    # 5. Kunde
+    kunde, kunde_key = waehle_kunde(region_key, lang_key)
+    kunde['_key'] = kunde_key
+
+    # 6. Positionen
+    positionen = positionen_eingeben(lang_key, currency)
+
+    if not positionen:
+        print(f"\n❌ {'No line items!' if is_en else 'Keine Positionen!'}")
+        sys.exit(1)
+
+    # 7. Bestätigung
+    gesamt = sum(p[1] * p[3] for p in positionen)
+    print("\n" + "=" * 60)
+    print(f"📋 {'SUMMARY' if is_en else 'ZUSAMMENFASSUNG'}")
+    print("=" * 60)
+    print(f"   Region:    {region['name']}")
+    print(f"   Language:  {lang['name']}")
+    print(f"   Invoice:   {rechnung_nr}")
+    print(f"   Date:      {datum}")
+    print(f"   Customer:  {kunde['name']}")
+    if region["vat_required"]:
+        print(f"   VAT ID:    {kunde.get('ust_id', 'N/A')}")
+    print(f"   Items:")
+    for pos in positionen:
+        print(f"      - {pos[0]}: {pos[1]} {pos[2]} × {currency} {pos[3]} = {currency} {pos[1] * pos[3]:.2f}")
+    print(f"   TOTAL:     {currency} {gesamt:.2f}")
+    print("=" * 60)
+
+    confirm = input(f"\n{'Create invoice? (Y/n)' if is_en else 'Rechnung erstellen? (J/n)'}: ").strip().lower()
+    if confirm == 'n':
+        print(f"❌ {'Cancelled.' if is_en else 'Abgebrochen.'}")
+        sys.exit(0)
+
+    # 8. Erstellen
+    dateipfad = create_invoice(
+        region_key=region_key,
+        lang_key=lang_key,
+        kunde=kunde,
+        positionen=positionen,
+        rechnung_nr=rechnung_nr,
+        datum=datum,
+        currency=currency,
+        dry_run=False,
+        no_git=False,
+    )
+
+    # 9. Git?
+    # (already handled in create_invoice for interactive mode)
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='BLAUWEISS-EDV LLC Invoice Generator',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  Interactive mode:
+    python3 neue-rechnung.py
+
+  From JSON file:
+    python3 neue-rechnung.py --from-file invoice.json
+
+  CLI arguments:
+    python3 neue-rechnung.py --region eu --lang de --customer nemensis --remote-hours 184
+
+  Dry run (preview only):
+    python3 neue-rechnung.py --from-file invoice.json --dry-run
+
+JSON file format:
+{
+    "region": "eu",
+    "lang": "de", 
+    "customer": "nemensis",
+    "invoice_nr": "OP_AR010_2025",
+    "date": "19. Dezember 2025",
+    "currency": "EUR",
+    "remote_hours": 184,
+    "remote_rate": 105,
+    "onsite_hours": 0,
+    "onsite_rate": 120,
+    "items": [
+        {"description": "Custom item", "quantity": 1, "unit": "Stk", "price": 500}
+    ]
+}
+        '''
+    )
+    
+    # Mode selection
+    parser.add_argument('--from-file', '-f', help='Load invoice data from JSON file')
+    parser.add_argument('--dry-run', '-n', action='store_true', help='Preview only, do not create files')
+    parser.add_argument('--no-git', action='store_true', help='Do not commit/push to git')
+    parser.add_argument('--output-dir', '-o', help='Output directory (default: template dir)')
+    
+    # Invoice data
+    parser.add_argument('--region', '-r', choices=['eu', 'usa', 'third'], help='Target region')
+    parser.add_argument('--lang', '-l', choices=['de', 'en'], help='Invoice language')
+    parser.add_argument('--currency', '-c', help='Currency (default: based on region)')
+    parser.add_argument('--invoice-nr', '-i', help='Invoice number')
+    parser.add_argument('--date', '-d', help='Invoice date')
+    parser.add_argument('--project-nr', help='Project number')
+    
+    # Customer (predefined or new)
+    parser.add_argument('--customer', help='Predefined customer key (e.g., nemensis)')
+    parser.add_argument('--customer-name', help='New customer: company name')
+    parser.add_argument('--customer-address', help='New customer: street address')
+    parser.add_argument('--customer-city', help='New customer: city/postal code')
+    parser.add_argument('--customer-country', help='New customer: country')
+    parser.add_argument('--customer-reg', help='New customer: registration number')
+    parser.add_argument('--customer-vat', help='New customer: VAT ID')
+    
+    # Line items
+    parser.add_argument('--remote-hours', type=float, help='Remote consulting hours')
+    parser.add_argument('--remote-rate', type=float, default=105, help='Remote hourly rate (default: 105)')
+    parser.add_argument('--onsite-hours', type=float, help='On-site consulting hours')
+    parser.add_argument('--onsite-rate', type=float, default=120, help='On-site hourly rate (default: 120)')
+    
+    # List options
+    parser.add_argument('--list-customers', action='store_true', help='List predefined customers')
+    parser.add_argument('--list-regions', action='store_true', help='List available regions')
+    
+    args = parser.parse_args()
+    
+    # List modes
+    if args.list_customers:
+        print("\n📋 Predefined customers:")
+        for key, kunde in KUNDEN.items():
+            print(f"   {key}: {kunde['name']} ({kunde.get('region', '?').upper()}, {kunde.get('ust_id', 'no VAT ID')})")
+        sys.exit(0)
+    
+    if args.list_regions:
+        print("\n🌍 Available regions:")
+        for key, region in REGIONS.items():
+            vat = "VAT ID required" if region["vat_required"] else "no VAT ID needed"
+            print(f"   {key}: {region['name']} - {region['description']} ({vat})")
+        sys.exit(0)
+    
+    # Determine mode
+    if args.from_file or args.region:
+        # CLI mode
+        if not args.from_file:
+            if not args.region:
+                parser.error("--region is required in CLI mode")
+            if not args.lang:
+                parser.error("--lang is required in CLI mode")
+            if not args.customer and not args.customer_name:
+                parser.error("--customer or --customer-name is required")
+            if not (args.remote_hours or args.onsite_hours):
+                parser.error("At least --remote-hours or --onsite-hours is required")
+        
+        run_cli(args)
+    else:
+        # Interactive mode
+        run_interactive()
 
 
 if __name__ == "__main__":
