@@ -368,18 +368,33 @@ def generiere_typst_code(rechnung_nr, datum, kunde, positionen, region_key, lang
 #v(0.5cm)
 '''
 
-    # Kunden-VAT-ID Zeile
-    customer_vat_line = ""
+    # Kunden-Adressblock dynamisch aufbauen
+    customer_lines = [
+        "#customer_name",
+        "#customer_address", 
+        "#customer_city",
+    ]
+    
+    # Land nur bei USA/Third anzeigen (EU hat Länderkürzel in PLZ wie "D - 20457")
+    if region_key != "eu" and kunde.get("land"):
+        customer_lines.append("#customer_country")
+    
+    # Handelsregister nur wenn vorhanden
+    if kunde.get("hrb"):
+        customer_lines.append("#customer_reg")
+    
+    # USt-IdNr. nur wenn erforderlich und vorhanden
     if region["vat_required"] and kunde.get("ust_id"):
-        customer_vat_line = f'{texts["vat_label"]}: {kunde.get("ust_id", "")}'
+        customer_lines.append(f'{texts["vat_label"]}: {kunde.get("ust_id", "")}')
+    
+    customer_block = " \\\\\n".join(customer_lines)
 
-    # Footer VAT-Hinweis
+    # Footer VAT-Hinweis (nur der Hinweistext, VAT-ID ist oben bei Kundenadresse)
     footer_vat = ""
     if texts["no_vat"]:
         footer_vat = f'''
 #text(size: 9pt, fill: gray)[
-  {texts["no_vat"]} \\\\
-  {texts["vat_label"]}: {kunde.get("ust_id", "")}
+  {texts["no_vat"]}
 ]
 '''
 
@@ -469,12 +484,7 @@ def generiere_typst_code(rechnung_nr, datum, kunde, positionen, region_key, lang
 #v(1cm)
 
 // === CUSTOMER ===
-#customer_name \\\\
-#customer_address \\\\
-#customer_city \\\\
-#customer_country \\\\
-#customer_reg \\\\
-{customer_vat_line}
+{customer_block}
 
 #v(1cm)
 
