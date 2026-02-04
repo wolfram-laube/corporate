@@ -7,6 +7,7 @@
 | Prefix | Domain | Count | Description |
 |--------|--------|-------|-------------|
 | [GOV](#governance) | Governance | 1 | Organization-wide decisions |
+| [AI](#ai--machine-learning) | AI / ML | 1 | Neurosymbolic AI, Runner Selection |
 | [RES](#research) | Research | 0* | CLARISSA, AI/ML, academic |
 | [OPS](#operations) | Operations | 2 | Billing, CRM, workflows |
 | [INF](#infrastructure) | Infrastructure | 0* | Runners, GCP, CI/CD |
@@ -26,6 +27,18 @@ Cross-cutting decisions affecting the entire organization.
 
 ---
 
+## AI / Machine Learning
+
+Artificial Intelligence, Machine Learning, Neurosymbolic Systems.
+
+| ID | Title | Status | Date |
+|----|-------|--------|------|
+| [AI-001](ai/AI-001-neurosymbolic-runner-selection.md) | Neurosymbolic Runner Selection | 🔄 Proposed | 2026-02-04 |
+
+**Related:** ops/backoffice Epic #27, JKU AI Bachelor Thesis (#26)
+
+---
+
 ## Research (RES)
 
 CLARISSA project, AI/NLP research, academic work.
@@ -42,10 +55,9 @@ Business operations: billing, invoicing, timesheets, CRM, applications.
 
 | ID | Title | Status | Date |
 |----|-------|--------|------|
-| [[OPS-001](operations/OPS-001-billing-migration.md) | Billing Migration | ✅ Accepted | 2026-02-04 | 2026-02-04 |
+| [OPS-001](operations/OPS-001-billing-migration.md) | Billing Migration | ✅ Accepted | 2026-02-04 |
 | [OPS-003](operations/OPS-003-runbook-structure.md) | Runbook Structure | ✅ Accepted | 2026-02-04 |
 | OPS-002 | CRM GitLab Issues | 📋 Planned | - |
-| OPS-003 | Runbook Structure | 📋 Planned | - |
 
 ---
 
