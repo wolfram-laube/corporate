@@ -8,7 +8,7 @@
 |--------|--------|-------|-------------|
 | [GOV](#governance) | Governance | 1 | Organization-wide decisions |
 | [RES](#research) | Research | 0* | CLARISSA, AI/ML, academic |
-| [OPS](#operations) | Operations | 0* | Billing, CRM, workflows |
+| [OPS](#operations) | Operations | 1 | Billing, CRM, workflows |
 | [INF](#infrastructure) | Infrastructure | 0* | Runners, GCP, CI/CD |
 
 *Migration from CLARISSA pending
@@ -28,7 +28,7 @@ Cross-cutting decisions affecting the entire organization.
 
 ## Research (RES)
 
-CLARISSA project, AI/ML research, academic work.
+CLARISSA project, AI/NLP research, academic work.
 
 | ID | Title | Status | Date |
 |----|-------|--------|------|
@@ -42,7 +42,7 @@ Business operations: billing, invoicing, timesheets, CRM, applications.
 
 | ID | Title | Status | Date |
 |----|-------|--------|------|
-| OPS-001 | Billing Migration | 📋 Planned | - |
+| [OPS-001](operations/OPS-001-billing-migration.md) | Billing Migration | 🔄 Proposed | 2026-02-04 |
 | OPS-002 | CRM GitLab Issues | 📋 Planned | - |
 | OPS-003 | Runbook Structure | 📋 Planned | - |
 
