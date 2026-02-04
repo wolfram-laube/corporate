@@ -151,19 +151,19 @@ ops/backoffice/ (77555895)
 
 ## Implementation Checklist
 
-- [ ] Create `modules/billing/` in backoffice
-- [ ] Copy scripts, templates, config from CLARISSA
-- [ ] Update Python imports (`from billing.` → `from modules.billing.`)
-- [ ] Update `.gitlab/billing.yml` paths
-- [ ] Create new Schedule in backoffice (same cron: `0 6 1 * *`)
-- [ ] Add CI variables: `GOOGLE_CREDENTIALS`, `GDRIVE_FOLDER_ID`
+- [x] Create `modules/billing/` in backoffice
+- [x] Copy scripts, templates, config from CLARISSA
+- [x] Update Python imports (paths only) (`from billing.` → `from modules.billing.`)
+- [x] Update `.gitlab/billing.yml` paths
+- [x] Create new Schedule (#4126476) in backoffice (same cron: `0 6 1 * *`)
+- [x] Add CI variables (BILLING_RUN): `GOOGLE_CREDENTIALS`, `GDRIVE_FOLDER_ID`
 - [ ] Test: Generate timesheet for test period
 - [ ] Test: Generate invoice for test period
 - [ ] Test: Upload to Google Drive
-- [ ] Delete CLARISSA `billing/` folder
-- [ ] Add deprecation notice in CLARISSA README
-- [ ] Archive `modules/timesheets/` and `modules/invoicing/`
-- [ ] Update this ADR status to "Accepted"
+- [ ] Delete CLARISSA `billing/` (after verification) folder
+- [x] Add deprecation notice in CLARISSA README
+- [x] Archive `modules/timesheets/` (DEPRECATED.md added) and `modules/invoicing/`
+- [x] Update this ADR status to "Accepted"
 
 ## Related
 
@@ -172,3 +172,33 @@ ops/backoffice/ (77555895)
 - CLARISSA ADR-017: GDrive Folder Structure (still valid)
 - Backoffice Schedule #4094512 (to be migrated)
 - Google Drive: BLAUWEISS-EDV-LLC shared drive
+
+---
+
+## Migration Log (2026-02-04)
+
+### Completed Steps
+
+| Step | Commit | Details |
+|------|--------|---------|
+| 1. Copy config | `02f573c3` | clients.yaml, sequences.yaml, README, CONVENTIONS |
+| 2. Copy scripts | `63cfa9d0` | 6 Python scripts |
+| 3. Copy templates | `ef5679a3` | 4 Typst templates + logo |
+| 4. Update CI | (update) | .gitlab/billing.yml paths updated |
+| 5. Create Schedule | #4126476 | 1st of month, 06:00 Vienna |
+| 6. Deactivate old | #4094512 | CLARISSA schedule disabled |
+| 7. Deprecation notices | `315f1a9f` | timesheets/, invoicing/ marked |
+| 8. CLARISSA notice | (update) | billing/README.md updated |
+
+### Pending
+
+- [ ] Test billing cycle (wait for next month or manual trigger)
+- [ ] Verify Google Drive credentials work in backoffice
+- [ ] Delete CLARISSA billing/ folder (after successful test)
+
+### New Schedule Details
+
+- **Project:** ops/backoffice (77555895)
+- **Schedule ID:** 4126476
+- **Cron:** `0 6 1 * *` (1st of month, 06:00 Vienna)
+- **Variable:** `BILLING_RUN=true`
