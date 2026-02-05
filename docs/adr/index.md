@@ -33,7 +33,7 @@ Artificial Intelligence, Machine Learning, Neurosymbolic Systems.
 
 | ID | Title | Status | Date |
 |----|-------|--------|------|
-| [AI-001](ai/AI-001-neurosymbolic-runner-selection.md) | Neurosymbolic Runner Selection | 🔄 Proposed | 2026-02-04 |
+| [AI-001](ai/AI-001-neurosymbolic-runner-selection.md) | Neurosymbolic Runner Selection | ✅ Accepted | 2026-02-05 |
 
 **Related:** ops/backoffice Epic #27, JKU AI Bachelor Thesis (#26)
 
