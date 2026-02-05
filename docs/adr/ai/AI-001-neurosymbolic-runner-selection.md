@@ -1,7 +1,7 @@
 # AI-001: Neurosymbolic Runner Selection Architecture
 
 **Status:** Accepted  
-**Date:** 2026-02-04  
+**Date:** 2026-02-04 (Updated: 2026-02-05)  
 **Author:** Wolfram Laube  
 **Tags:** ai/ml, neurosymbolic-ai, reinforcement-learning, ci/cd, jku-bachelor  
 **Supersedes:** —  
@@ -74,7 +74,20 @@ Wir implementieren eine **zweistufige Neurosymbolic AI Architektur**:
 └─────────────────────────────────────────────────────┘
 ```
 
-### Neural-Symbolic Interface (#25)
+### Neural-Symbolic Interface (#25) ✅ IMPLEMENTED
+
+```python
+from nsai import NeurosymbolicBandit
+
+nsai = NeurosymbolicBandit.create_default()
+runner, explanation = nsai.select_runner({
+    "tags": ["docker-any"],
+    "image": "python:3.11"
+})
+
+# explanation contains both symbolic and statistical reasoning
+print(explanation)
+```
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -83,14 +96,20 @@ Wir implementieren eine **zweistufige Neurosymbolic AI Architektur**:
 │                                                      │
 │  Symbolic → Neural:                                  │
 │  ┌────────────────────────────────────────────┐     │
-│  │ Constraint violations → Negative reward     │     │
-│  │ Ontology features → Bandit context vectors  │     │
+│  │ CSP filters feasible set → Dynamic action   │     │
+│  │ space reduction for faster MAB convergence  │     │
 │  └────────────────────────────────────────────┘     │
 │                                                      │
 │  Neural → Symbolic:                                  │
 │  ┌────────────────────────────────────────────┐     │
-│  │ Learned preferences → Ontology annotations  │     │
-│  │ Performance data → Knowledge Graph updates  │     │
+│  │ MAB statistics can be synced from deployed  │     │
+│  │ Cloud Run service for warm-start            │     │
+│  └────────────────────────────────────────────┘     │
+│                                                      │
+│  Explanation:                                        │
+│  ┌────────────────────────────────────────────┐     │
+│  │ Both layers contribute to human-readable    │     │
+│  │ explanation of runner selection decision    │     │
 │  └────────────────────────────────────────────┘     │
 │                                                      │
 └─────────────────────────────────────────────────────┘
@@ -124,41 +143,57 @@ Wir implementieren eine **zweistufige Neurosymbolic AI Architektur**:
 | Pure MAB (nur #28) | Einfach, selbstlernend | Ignoriert Constraints, langsame Konvergenz | Feasibility nicht garantiert |
 | Pure Rule-Based | Deterministisch, erklärbar | Keine Adaption, manuell | Lernt nicht aus Erfahrung |
 | Deep RL (DQN/PPO) | State-of-the-art | Overengineered, Sample-ineffizient | Für <10 Runner übertrieben |
-| Contextual Bandits | Nutzt Job-Features | Noch keine Constraints | Phase 2 möglich |
+| Contextual Bandits | Nutzt Job-Features | Noch keine Constraints | Phase 5 möglich |
 
 ## Implementation
 
-### Phase 1: MAB Baseline (Issue #28) ✅
+### Phase 1: MAB Baseline (Issue #28) ✅ COMPLETE
 - [x] UCB1, Thompson Sampling, ε-Greedy
 - [x] FastAPI Webhook Handler
 - [x] State Persistence
-- [ ] Deploy to GCP Cloud Run (in progress)
-- [ ] Collect baseline data (2 weeks)
+- [x] Deploy to GCP Cloud Run
+- [x] Webhook integration (collecting data)
 
-### Phase 2: Symbolic Layer (Issues #22-24)
-- [ ] #22: Runner Capability Ontology (OWL/RDF)
-- [ ] #23: Job Requirement Parser
-- [ ] #24: Constraint Satisfaction Module
+**Service:** https://runner-bandit-m5cziijwqa-lz.a.run.app  
+**Stats:** 50 observations, 96% success rate (as of 2026-02-05)
 
-### Phase 3: Integration (Issue #25)
-- [ ] #25: Neural-Symbolic Interface
-- [ ] A/B Testing: Pure MAB vs. Neurosymbolic
-- [ ] Performance Comparison Paper
+### Phase 2: Symbolic Layer (Issues #22-24) ✅ COMPLETE
+- [x] #22: Runner Capability Ontology
+- [x] #23: Job Requirement Parser
+- [x] #24: Constraint Satisfaction Module
 
-### Phase 4: Documentation (Issue #26)
+**Location:** `services/nsai/` (ontology, parser, csp)
+
+### Phase 3: Integration (Issue #25) ✅ COMPLETE
+- [x] #25: Neural-Symbolic Interface (`NeurosymbolicBandit` class)
+- [x] Explanation generation for both layers
+- [x] MAB service sync capability
+- [ ] A/B Testing: Pure MAB vs. Neurosymbolic (pending)
+- [ ] Performance Comparison (pending)
+
+**MR:** !12 (feature/25-nsai-interface)
+
+### Phase 4: Documentation (Issue #26) 🔄 IN PROGRESS
 - [ ] #26: JKU Bachelor Paper Draft
 - [ ] Evaluation & Results
+- [x] README with usage examples
+- [x] ADR updates
+
+### Phase 5: Advanced Features (Future)
+- [ ] Contextual Bandits (job features as context)
+- [ ] Online learning integration
+- [ ] GitLab Pages dashboard for stats
 
 ## Related
 
 ### Internal
 - Epic: ops/backoffice#27 [EPIC] Neurosymbolic AI Runner Selection
-- ops/backoffice#28 [MAB] Runner Bandit Service - Baseline
-- ops/backoffice#22 [NSAI] Runner Capability Ontology Design
-- ops/backoffice#23 [NSAI] Job Requirement Parser
-- ops/backoffice#24 [NSAI] Constraint Satisfaction Module
-- ops/backoffice#25 [NSAI] Neural-Symbolic Interface
-- ops/backoffice#26 [NSAI] JKU Bachelor Paper Draft
+- ops/backoffice#28 [MAB] Runner Bandit Service - Baseline ✅
+- ops/backoffice#22 [NSAI] Runner Capability Ontology Design ✅
+- ops/backoffice#23 [NSAI] Job Requirement Parser ✅
+- ops/backoffice#24 [NSAI] Constraint Satisfaction Module ✅
+- ops/backoffice#25 [NSAI] Neural-Symbolic Interface ✅
+- ops/backoffice#26 [NSAI] JKU Bachelor Paper Draft 🔄
 
 ### Literature
 - Garcez, A. et al. (2019). Neural-Symbolic Computing: An Effective Methodology for Principled Integration of Machine Learning and Reasoning
