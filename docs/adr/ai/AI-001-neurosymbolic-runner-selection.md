@@ -1,6 +1,6 @@
 # AI-001: Neurosymbolic Runner Selection Architecture
 
-**Status:** Proposed  
+**Status:** Accepted  
 **Date:** 2026-02-04  
 **Author:** Wolfram Laube  
 **Tags:** ai/ml, neurosymbolic-ai, reinforcement-learning, ci/cd, jku-bachelor  
