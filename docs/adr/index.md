@@ -6,7 +6,7 @@
 
 | Prefix | Domain | Count | Description |
 |--------|--------|-------|-------------|
-| [GOV](#governance) | Governance | 1 | Organization-wide decisions |
+| [GOV](#governance) | Governance | 2 | Organization-wide decisions |
 | [AI](#ai--machine-learning) | AI / ML | 1 | Neurosymbolic AI, Runner Selection |
 | [RES](#research) | Research | 0* | CLARISSA, AI/ML, academic |
 | [OPS](#operations) | Operations | 2 | Billing, CRM, workflows |
@@ -23,7 +23,10 @@ Cross-cutting decisions affecting the entire organization.
 | ID | Title | Status | Date |
 |----|-------|--------|------|
 | [GOV-001](governance/GOV-001-adr-structure.md) | ADR Structure | ✅ Accepted | 2026-02-04 |
-| GOV-002 | Repository Responsibilities | 📋 Planned | - |
+| [GOV-002](governance/GOV-002-notebook-standards.md) | Jupyter Notebook Standards | ✅ Accepted | 2026-02-05 |
+| GOV-003 | Repository Responsibilities | 📋 Planned | - |
+
+**Templates:** [`docs/templates/notebook-template.ipynb`](../templates/notebook-template.ipynb)
 
 ---
 
@@ -90,3 +93,8 @@ CI/CD pipelines, GitLab runners, cloud infrastructure, Kubernetes.
 3. Fill out all sections
 4. Submit MR for review
 5. Update this index after merge
+
+### Templates
+
+- **ADR:** [`_template.md`](./_template.md)
+- **Notebook:** [`docs/templates/notebook-template.ipynb`](../templates/notebook-template.ipynb)
