@@ -10,7 +10,7 @@
 | [AI](#ai--machine-learning) | AI / ML | 1 | Neurosymbolic AI, Runner Selection |
 | [RES](#research) | Research | 0* | CLARISSA, AI/ML, academic |
 | [OPS](#operations) | Operations | 2 | Billing, CRM, workflows |
-| [INF](#infrastructure) | Infrastructure | 0* | Runners, GCP, CI/CD |
+| [INF](#infrastructure) | Infrastructure | 1 | Runners, GCP, CI/CD |
 
 *Migration from CLARISSA pending
 
@@ -70,6 +70,7 @@ CI/CD pipelines, GitLab runners, cloud infrastructure, Kubernetes.
 
 | ID | Title | Status | Date |
 |----|-------|--------|------|
+| [INF-001](infrastructure/INF-001-ci-test-observability.md) | CI/CD Test Observability | ✅ Accepted | 2026-02-05 |
 | *Migration pending from CLARISSA infrastructure ADRs* |
 
 ---
