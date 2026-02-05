@@ -124,7 +124,7 @@ Option B is designed as a stepping stone. When the need arises:
 - [GOV-002: Notebook Standards](../governance/GOV-002-notebook-standards.md) — notebook tests are a data source
 - [OPS-001: Billing Migration](../operations/OPS-001-billing-migration.md) — billing tests are a data source
 - [AI-001: Neurosymbolic Runner Selection](../ai/AI-001-neurosymbolic-runner-selection.md) — NSAI tests are a data source
-- ops/backoffice Issue #37 — Implementation backlog
+- ops/backoffice Issue #40 — Implementation backlog
 
 ### External
 - [GitLab JUnit Reports](https://docs.gitlab.com/ee/ci/testing/unit_test_reports.html)
