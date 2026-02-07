@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOV-003: Publication Pipeline Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;600;700;900&display=swap');
+
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface2: #1a2332;
+    --border: #2a3a4d;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --text-muted: #475569;
+    --latex:    #EF4444;   /* LaTeX = red (traditional) */
+    --notebook: #3B82F6;   /* Notebook = blue (digital) */
+    --quarto:   #10B981;   /* Quarto/Synthesis = emerald */
+    --thesis:   #A855F7;   /* Thesis = purple (academic) */
+    --colab:    #F59E0B;   /* Colab = amber (Google) */
+    --ci:       #06B6D4;   /* CI = cyan (automation) */
+    --done:     #10B981;
+    --progress: #3B82F6;
+    --planned:  #64748B;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.65;
+  }
+
+  .grain {
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 100;
+  }
+
+  /* ── Ambient ─────────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background:
+      radial-gradient(ellipse at 25% 25%, rgba(16,185,129,0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 75% 75%, rgba(59,130,246,0.03) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(168,85,247,0.02) 0%, transparent 40%);
+    animation: drift 30s ease-in-out infinite;
+    pointer-events: none; z-index: -1;
+  }
+  @keyframes drift {
+    0%, 100% { transform: translate(0,0) rotate(0); }
+    33% { transform: translate(2%,-1%) rotate(1deg); }
+    66% { transform: translate(-1%,2%) rotate(-1deg); }
+  }
+
+  /* ── Header ──────────────────────────────────────────── */
+  header {
+    padding: 3rem 2rem 2rem;
+    text-align: center;
+    position: relative;
+  }
+  header::after {
+    content: ''; position: absolute; bottom: 0; left: 50%;
+    transform: translateX(-50%); width: 80%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+  .title {
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-weight: 900; letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--latex), var(--quarto), var(--notebook));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.3rem;
+  }
+  .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem; color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+  .meta {
+    margin-top: 1rem; display: flex; justify-content: center;
+    gap: 1.5rem; flex-wrap: wrap;
+  }
+  .meta-item {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; color: var(--text-muted);
+  }
+  .meta-item span { color: var(--quarto); }
+  .status-badge {
+    display: inline-block; padding: 0.2rem 0.6rem;
+    border-radius: 20px; font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; letter-spacing: 0.1em;
+    background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3);
+    color: var(--colab); text-transform: uppercase;
+  }
+
+  /* ── Layout ──────────────────────────────────────────── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  /* ── Section ─────────────────────────────────────────── */
+  section { margin: 3rem 0; }
+  .section-header {
+    display: flex; align-items: center; gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .section-header h2 {
+    font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .section-header .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; padding: 0.15rem 0.5rem;
+    border-radius: 4px; background: var(--surface2);
+    color: var(--text-dim); border: 1px solid var(--border);
+  }
+
+  /* ── Cards ───────────────────────────────────────────── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.5rem;
+    margin-bottom: 1rem; transition: all 0.3s ease;
+  }
+  .card:hover {
+    border-color: rgba(16,185,129,0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .card p { color: var(--text-dim); font-size: 0.9rem; margin-top: 0.5rem; }
+
+  /* ── Problem Chain ───────────────────────────────────── */
+  .chain {
+    display: flex; align-items: center; gap: 0;
+    flex-wrap: wrap; justify-content: center;
+    margin: 1.5rem 0;
+  }
+  .chain-step {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.6rem 1rem;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+    text-align: center; min-width: 140px;
+    transition: all 0.3s;
+  }
+  .chain-step:hover { border-color: var(--quarto); }
+  .chain-step .step-label {
+    font-size: 0.6rem; text-transform: uppercase;
+    letter-spacing: 0.1em; margin-bottom: 0.25rem;
+  }
+  .chain-arrow {
+    color: var(--text-muted); font-size: 1rem;
+    padding: 0 0.3rem; flex-shrink: 0;
+  }
+  .chain-arrow.manual {
+    color: var(--latex); font-weight: 700;
+    position: relative;
+  }
+  .chain-arrow.manual::after {
+    content: 'manuell'; position: absolute;
+    bottom: -14px; left: 50%; transform: translateX(-50%);
+    font-size: 0.55rem; color: var(--latex);
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+  }
+
+  /* ── Dialectic ───────────────────────────────────────── */
+  .dialectic {
+    display: grid; grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 0; align-items: stretch; margin: 1.5rem 0;
+  }
+  .dial-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+    transition: all 0.3s ease;
+  }
+  .dial-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .dial-card.these    { border-top: 3px solid var(--latex); }
+  .dial-card.antithese { border-top: 3px solid var(--notebook); }
+  .dial-card.synthese  { border-top: 3px solid var(--quarto); }
+  .dial-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; text-transform: uppercase;
+    letter-spacing: 0.15em; margin-bottom: 0.5rem;
+  }
+  .these .dial-label    { color: var(--latex); }
+  .antithese .dial-label { color: var(--notebook); }
+  .synthese .dial-label  { color: var(--quarto); }
+  .dial-card h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+  .dial-card .quote {
+    font-style: italic; color: var(--text-dim);
+    font-size: 0.85rem; margin-bottom: 0.5rem;
+    border-left: 2px solid var(--border); padding-left: 0.75rem;
+  }
+  .dial-card ul {
+    list-style: none; padding: 0; margin-top: 0.5rem;
+  }
+  .dial-card li {
+    font-size: 0.8rem; color: var(--text-dim);
+    padding: 0.15rem 0; padding-left: 1rem;
+    position: relative;
+  }
+  .dial-card li::before {
+    content: ''; position: absolute; left: 0; top: 0.55rem;
+    width: 5px; height: 5px; border-radius: 50%;
+  }
+  .these li::before    { background: var(--latex); }
+  .antithese li::before { background: var(--notebook); }
+  .synthese li::before  { background: var(--quarto); }
+  .dial-arrow {
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 0.5rem; color: var(--text-muted); font-size: 1.2rem;
+  }
+
+  @media (max-width: 768px) {
+    .dialectic { grid-template-columns: 1fr; gap: 0.5rem; }
+    .dial-arrow { transform: rotate(90deg); padding: 0.3rem 0; }
+  }
+
+  /* ── Pipeline Diagram ────────────────────────────────── */
+  .pipeline {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 0;
+    margin: 2rem 0;
+  }
+  .pipe-node {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1rem 1.5rem;
+    width: 100%; max-width: 500px; text-align: center;
+    position: relative; transition: all 0.3s;
+  }
+  .pipe-node:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .pipe-node .node-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; text-transform: uppercase;
+    letter-spacing: 0.12em; margin-bottom: 0.3rem;
+  }
+  .pipe-node h4 { font-size: 1rem; margin-bottom: 0.2rem; }
+  .pipe-node .node-detail {
+    font-size: 0.75rem; color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .pipe-node.l1 { border-left: 3px solid var(--colab); }
+  .pipe-node.l1 .node-label { color: var(--colab); }
+  .pipe-node.l2 { border-left: 3px solid var(--notebook); }
+  .pipe-node.l2 .node-label { color: var(--notebook); }
+  .pipe-node.l3 { border-left: 3px solid var(--latex); }
+  .pipe-node.l3 .node-label { color: var(--latex); }
+  .pipe-node.l4 { border-left: 3px solid var(--thesis); }
+  .pipe-node.l4 .node-label { color: var(--thesis); }
+  .pipe-node.l5 { border-left: 3px solid var(--done); }
+  .pipe-node.l5 .node-label { color: var(--done); }
+  .pipe-connector {
+    width: 2px; height: 28px;
+    background: linear-gradient(to bottom, var(--border), var(--text-muted));
+    position: relative;
+  }
+  .pipe-connector .conn-label {
+    position: absolute; left: 16px; top: 50%;
+    transform: translateY(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .pipe-connector.quarto-bridge {
+    background: linear-gradient(to bottom, var(--notebook), var(--quarto));
+    width: 3px;
+  }
+  .pipe-connector.quarto-bridge .conn-label { color: var(--quarto); font-weight: 500; }
+
+  /* ── Two-Phase Table ─────────────────────────────────── */
+  .phase-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1rem; margin: 1.5rem 0;
+  }
+  .phase-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+    transition: all 0.3s;
+  }
+  .phase-card:hover { border-color: rgba(16,185,129,0.3); }
+  .phase-card.scratch { border-top: 3px solid var(--colab); }
+  .phase-card.publication { border-top: 3px solid var(--quarto); }
+  .phase-card h4 { font-size: 0.95rem; margin-bottom: 0.75rem; }
+  .phase-card .phase-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; text-transform: uppercase;
+    letter-spacing: 0.12em; margin-bottom: 0.5rem;
+  }
+  .scratch .phase-label { color: var(--colab); }
+  .publication .phase-label { color: var(--quarto); }
+  .phase-row {
+    display: flex; justify-content: space-between;
+    padding: 0.3rem 0; border-bottom: 1px solid rgba(42,58,77,0.4);
+    font-size: 0.8rem;
+  }
+  .phase-row:last-child { border-bottom: none; }
+  .phase-key { color: var(--text-dim); }
+  .phase-val { color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+
+  @media (max-width: 768px) {
+    .phase-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Directory Tree ──────────────────────────────────── */
+  .tree {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem; line-height: 1.8;
+    overflow-x: auto; margin: 1rem 0;
+  }
+  .tree .dir { color: var(--notebook); }
+  .tree .file-tex { color: var(--latex); }
+  .tree .file-ipynb { color: var(--colab); }
+  .tree .file-bib { color: var(--thesis); }
+  .tree .file-html { color: var(--quarto); }
+  .tree .file-pdf { color: var(--text-dim); }
+  .tree .comment { color: var(--text-muted); font-style: italic; }
+
+  /* ── Alternatives Table ──────────────────────────────── */
+  .alt-table {
+    width: 100%; border-collapse: separate;
+    border-spacing: 0; font-size: 0.82rem;
+  }
+  .alt-table th {
+    background: var(--surface2); padding: 0.7rem 0.8rem;
+    text-align: left; font-weight: 600;
+    font-size: 0.7rem; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+  }
+  .alt-table th:first-child { border-radius: 8px 0 0 0; }
+  .alt-table th:last-child { border-radius: 0 8px 0 0; }
+  .alt-table td {
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid rgba(42,58,77,0.4);
+    vertical-align: top;
+  }
+  .alt-table tr:hover td { background: var(--surface2); }
+  .alt-table .verdict { font-weight: 600; }
+  .alt-table .verdict.no { color: var(--latex); }
+  .alt-table .verdict.yes { color: var(--quarto); }
+
+  /* ── Implementation Checklist ────────────────────────── */
+  .impl-phases {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem; margin: 1rem 0;
+  }
+  .impl-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+  }
+  .impl-card h4 {
+    font-size: 0.85rem; margin-bottom: 0.75rem;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .impl-card .phase-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .impl-item {
+    display: flex; align-items: flex-start; gap: 0.5rem;
+    padding: 0.25rem 0; font-size: 0.78rem; color: var(--text-dim);
+  }
+  .impl-item .check {
+    flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px;
+    border-radius: 3px; border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.65rem;
+  }
+  .impl-item.done .check {
+    background: rgba(16,185,129,0.2); border-color: var(--done); color: var(--done);
+  }
+  .impl-item.pending .check { color: transparent; }
+
+  /* ── Consequences ────────────────────────────────────── */
+  .conseq-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1rem; margin: 1rem 0;
+  }
+  .conseq-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+  }
+  .conseq-card.positive { border-left: 3px solid var(--done); }
+  .conseq-card.negative { border-left: 3px solid var(--latex); }
+  .conseq-card h4 { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  .conseq-item {
+    font-size: 0.8rem; color: var(--text-dim);
+    padding: 0.2rem 0; padding-left: 0.75rem;
+    position: relative;
+  }
+  .conseq-item::before {
+    content: ''; position: absolute; left: 0; top: 0.5rem;
+    width: 4px; height: 4px; border-radius: 50%;
+  }
+  .positive .conseq-item::before { background: var(--done); }
+  .negative .conseq-item::before { background: var(--latex); }
+
+  @media (max-width: 768px) {
+    .conseq-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Footer ──────────────────────────────────────────── */
+  footer {
+    text-align: center; padding: 3rem 0 1rem;
+    color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+  }
+  footer a { color: var(--quarto); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* ── Animations ──────────────────────────────────────── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .anim { animation: fadeUp 0.6s ease-out both; }
+  .d1 { animation-delay: 0.1s; }
+  .d2 { animation-delay: 0.2s; }
+  .d3 { animation-delay: 0.3s; }
+  .d4 { animation-delay: 0.4s; }
+  .d5 { animation-delay: 0.5s; }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<!-- ═══ HEADER ═══════════════════════════════════════════ -->
+<header class="anim">
+  <div class="title">Publication Pipeline</div>
+  <div class="subtitle">GOV-003 · Architecture Decision Record</div>
+  <div class="meta">
+    <span class="status-badge">Proposed</span>
+    <span class="meta-item">Date: <span>2026-02-07</span></span>
+    <span class="meta-item">Author: <span>Wolfram Laube</span></span>
+    <span class="meta-item">Tags: <span>governance · publishing · quarto · latex · jupyter</span></span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ═══ CONTEXT ════════════════════════════════════════ -->
+  <section class="anim d1">
+    <div class="section-header">
+      <div class="dot" style="background:var(--latex)"></div>
+      <h2>Das Problem</h2>
+      <span class="tag">Context</span>
+    </div>
+
+    <div class="card">
+      <p>Ein Experiment-Ergebnis durchläuft heute <strong>drei manuelle Übergaben</strong>. Bei jeder Änderung können Zahlen, Plots und Prose auseinanderlaufen:</p>
+    </div>
+
+    <div class="chain">
+      <div class="chain-step">
+        <div class="step-label" style="color:var(--notebook)">Notebook</div>
+        experiment.ipynb
+      </div>
+      <div class="chain-arrow manual">→</div>
+      <div class="chain-step">
+        <div class="step-label" style="color:var(--text-dim)">Figures</div>
+        plt.savefig()
+      </div>
+      <div class="chain-arrow manual">→</div>
+      <div class="chain-step">
+        <div class="step-label" style="color:var(--latex)">Paper</div>
+        \includegraphics
+      </div>
+      <div class="chain-arrow manual">→</div>
+      <div class="chain-step">
+        <div class="step-label" style="color:var(--thesis)">PDF</div>
+        pdflatex
+      </div>
+    </div>
+
+    <div class="card">
+      <p>Gleichzeitig haben wir vier Anforderungen die einander widersprechen:</p>
+      <p style="margin-top:0.75rem;">
+        <strong style="color:var(--thesis)">① JKU</strong> verlangt LaTeX-PDF &nbsp;·&nbsp;
+        <strong style="color:var(--colab)">② Colab</strong> braucht .ipynb &nbsp;·&nbsp;
+        <strong style="color:var(--colab)">③ Forschung</strong> braucht Freiheit &nbsp;·&nbsp;
+        <strong style="color:var(--quarto)">④ Multi-Output</strong> (PDF + HTML + Slides)
+      </p>
+    </div>
+  </section>
+
+  <!-- ═══ DIALECTIC ══════════════════════════════════════ -->
+  <section class="anim d2">
+    <div class="section-header">
+      <div class="dot" style="background:var(--quarto)"></div>
+      <h2>Dialektische Analyse</h2>
+    </div>
+
+    <div class="dialectic">
+      <div class="dial-card these">
+        <div class="dial-label">These · LaTeX</div>
+        <h3>Paper ist .tex</h3>
+        <div class="quote">„Alles andere ist Zuarbeit."</div>
+        <ul>
+          <li>Volle typografische Kontrolle</li>
+          <li>Akademischer Standard seit 40 Jahren</li>
+          <li>JKU-Templates nativ</li>
+          <li style="color:var(--latex)">✗ Zahlen sind Copy-Paste</li>
+          <li style="color:var(--latex)">✗ Single Output (nur PDF)</li>
+          <li style="color:var(--latex)">✗ Kein Rückkanal vom Experiment</li>
+        </ul>
+      </div>
+
+      <div class="dial-arrow">→</div>
+
+      <div class="dial-card antithese">
+        <div class="dial-label">Antithese · Notebook</div>
+        <h3>Notebook ist Paper</h3>
+        <div class="quote">„Code, Text, Ergebnisse — ein Dokument."</div>
+        <ul>
+          <li>Voll reproduzierbar</li>
+          <li>Code = Beweis</li>
+          <li>Colab-kompatibel</li>
+          <li style="color:var(--notebook)">✗ Kein JKU-Einreichformat</li>
+          <li style="color:var(--notebook)">✗ Keine Theorem-Environments</li>
+          <li style="color:var(--notebook)">✗ Experimentierfreiheit leidet</li>
+        </ul>
+      </div>
+
+      <div class="dial-arrow">→</div>
+
+      <div class="dial-card synthese">
+        <div class="dial-label">Synthese · Drei Ebenen</div>
+        <h3>Jede Ebene ihr Format</h3>
+        <div class="quote">„Quarto verbindet, ohne zu ersetzen."</div>
+        <ul>
+          <li>Notebook generiert Figures automatisch</li>
+          <li>Paper bleibt LaTeX (volle Kontrolle)</li>
+          <li>Thesis wrappet Paper (JKU-konform)</li>
+          <li>Colab bleibt Colab</li>
+          <li>CI-Pipeline verbindet alles</li>
+          <li>HTML + PDF aus einer Source</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ THREE-LAYER PIPELINE ═══════════════════════════ -->
+  <section class="anim d3">
+    <div class="section-header">
+      <div class="dot" style="background:var(--ci)"></div>
+      <h2>Der Build-Graph</h2>
+      <span class="tag">Decision</span>
+    </div>
+
+    <div class="pipeline">
+      <div class="pipe-node l1">
+        <div class="node-label">☁️ Colab / Branch</div>
+        <h4>Scratch Notebooks</h4>
+        <div class="node-detail">Frei experimentieren · Chaos erwünscht · Ephemer</div>
+      </div>
+
+      <div class="pipe-connector">
+        <div class="conn-label">Erkenntnisse reifen →</div>
+      </div>
+
+      <div class="pipe-node l2">
+        <div class="node-label">📓 Ebene 1 · Experiment</div>
+        <h4>Publication Notebook</h4>
+        <div class="node-detail">.ipynb · CI-getestet · 85 Assertions · GOV-002 konform</div>
+      </div>
+
+      <div class="pipe-connector quarto-bridge">
+        <div class="conn-label">quarto render → figures/*.pdf + dashboard.html</div>
+      </div>
+
+      <div class="pipe-node l3">
+        <div class="node-label">📄 Ebene 2 · Paper</div>
+        <h4>LaTeX + BibTeX</h4>
+        <div class="node-detail">.tex + .bib · \includegraphics · Algorithmen · Propositionen</div>
+      </div>
+
+      <div class="pipe-connector">
+        <div class="conn-label">\input{chapters/nsai-paper}</div>
+      </div>
+
+      <div class="pipe-node l4">
+        <div class="node-label">🎓 Ebene 3 · Thesis</div>
+        <h4>JKU-Template</h4>
+        <div class="node-detail">.tex + .cls · Titelblatt · Eidesstattliche Erklärung · Abstract</div>
+      </div>
+
+      <div class="pipe-connector">
+        <div class="conn-label">pdflatex → bibtex → pdflatex × 2</div>
+      </div>
+
+      <div class="pipe-node l5">
+        <div class="node-label">✅ Output</div>
+        <h4>Eingereicht bei JKU</h4>
+        <div class="node-detail">PDF (Thesis) · PDF (Paper) · HTML (Dashboard) · .ipynb (Colab)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ TWO NOTEBOOK PHASES ════════════════════════════ -->
+  <section class="anim d4">
+    <div class="section-header">
+      <div class="dot" style="background:var(--colab)"></div>
+      <h2>Zwei Notebook-Phasen</h2>
+    </div>
+
+    <div class="phase-grid">
+      <div class="phase-card scratch">
+        <div class="phase-label">🧪 Scratch Notebook</div>
+        <h4>Erkenntnisgewinn</h4>
+        <div class="phase-row"><span class="phase-key">Wo</span><span class="phase-val">Colab, Branch, CLARISSA</span></div>
+        <div class="phase-row"><span class="phase-key">Disziplin</span><span class="phase-val">Keine — Chaos erwünscht</span></div>
+        <div class="phase-row"><span class="phase-key">Git</span><span class="phase-val">Branch, kann weg</span></div>
+        <div class="phase-row"><span class="phase-key">Quarto</span><span class="phase-val">Nein</span></div>
+        <div class="phase-row"><span class="phase-key">GOV-002</span><span class="phase-val">Empfohlen</span></div>
+        <div class="phase-row"><span class="phase-key">Analogie</span><span class="phase-val" style="color:var(--colab)">≈ Feature Branch</span></div>
+      </div>
+      <div class="phase-card publication">
+        <div class="phase-label">📊 Publication Notebook</div>
+        <h4>Ergebnisnachweis</h4>
+        <div class="phase-row"><span class="phase-key">Wo</span><span class="phase-val">backoffice/main, CI-getestet</span></div>
+        <div class="phase-row"><span class="phase-key">Disziplin</span><span class="phase-val">Reproduzierbar, linear, assertiert</span></div>
+        <div class="phase-row"><span class="phase-key">Git</span><span class="phase-val">Main, versioniert, tagged</span></div>
+        <div class="phase-row"><span class="phase-key">Quarto</span><span class="phase-val">Ja — rendert Figures + HTML</span></div>
+        <div class="phase-row"><span class="phase-key">GOV-002</span><span class="phase-val">Pflicht</span></div>
+        <div class="phase-row"><span class="phase-key">Analogie</span><span class="phase-val" style="color:var(--quarto)">≈ Main Branch</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ DIRECTORY STRUCTURE ════════════════════════════ -->
+  <section>
+    <div class="section-header">
+      <div class="dot" style="background:var(--notebook)"></div>
+      <h2>Verzeichnisstruktur</h2>
+      <span class="tag">backoffice/</span>
+    </div>
+
+    <div class="tree">
+<span class="dir">backoffice/</span>
+├── <span class="dir">services/nsai/</span>
+│   ├── __init__.py, interface.py, …       <span class="comment">← Code</span>
+│   └── <span class="dir">notebooks/</span>
+│       ├── <span class="file-ipynb">nsai_experiment.ipynb</span>        <span class="comment">← Publication Notebook (Ebene 1)</span>
+│       └── _quarto.yml                    <span class="comment">← Render-Config</span>
+│
+└── <span class="dir">docs/publications/</span>
+    └── <span class="dir">nsai-runner-selection-2026/</span>
+        ├── <span class="file-tex">nsai_paper.tex</span>                 <span class="comment">← Paper (Ebene 2)</span>
+        ├── <span class="file-bib">nsai_paper.bib</span>
+        ├── <span class="dir">figures/</span>                        <span class="comment">← Generated, .gitignored</span>
+        │   ├── <span class="file-pdf">fig2_cumulative_reward.pdf</span>
+        │   └── …
+        ├── <span class="file-html">nsai_results.html</span>              <span class="comment">← Interactive Dashboard</span>
+        └── Makefile                        <span class="comment">← Orchestriert den Build</span>
+    </div>
+  </section>
+
+  <!-- ═══ ALTERNATIVES ═══════════════════════════════════ -->
+  <section>
+    <div class="section-header">
+      <div class="dot" style="background:var(--text-dim)"></div>
+      <h2>Alternativen</h2>
+    </div>
+
+    <div class="card" style="padding:0; overflow:hidden;">
+      <table class="alt-table">
+        <thead>
+          <tr>
+            <th>Alternative</th>
+            <th>Stärke</th>
+            <th>Schwäche</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Alles in LaTeX</td>
+            <td>Einfach, bewährt</td>
+            <td>Zahlen-Drift, kein Multi-Output</td>
+            <td class="verdict no">Status quo ✗</td>
+          </tr>
+          <tr>
+            <td>Alles im Notebook</td>
+            <td>Reproduzierbar</td>
+            <td>Kein JKU-Format, keine Theoreme</td>
+            <td class="verdict no">Akademisch ✗</td>
+          </tr>
+          <tr>
+            <td>Quarto als einzige Source (.qmd)</td>
+            <td>Eleganteste Lösung</td>
+            <td>Kein Colab, Lock-in</td>
+            <td class="verdict no">Overengineered ✗</td>
+          </tr>
+          <tr>
+            <td>Overleaf + manuell</td>
+            <td>Kollaborativ</td>
+            <td>Kein CI, manuelle Syncs</td>
+            <td class="verdict no">Nicht automatisierbar ✗</td>
+          </tr>
+          <tr>
+            <td style="color:var(--quarto); font-weight:600">Drei-Ebenen + Quarto Bridge</td>
+            <td>Jede Ebene ihr Format</td>
+            <td>Toolchain-Komplexität</td>
+            <td class="verdict yes">✓ Gewählt</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══ CONSEQUENCES ═══════════════════════════════════ -->
+  <section>
+    <div class="section-header">
+      <div class="dot" style="background:var(--done)"></div>
+      <h2>Konsequenzen</h2>
+    </div>
+
+    <div class="conseq-grid">
+      <div class="conseq-card positive">
+        <h4 style="color:var(--done)">Positiv</h4>
+        <div class="conseq-item">Ein git push generiert Paper-PDF mit aktuellen Daten</div>
+        <div class="conseq-item">Jede Ebene hat genau eine Source of Truth</div>
+        <div class="conseq-item">Colab bleibt — Standard .ipynb, kein Lock-in</div>
+        <div class="conseq-item">Experimentierfreiheit in Scratch-Notebooks</div>
+        <div class="conseq-item">Notebook-Assertions sichern Datenintegrität</div>
+        <div class="conseq-item">Multi-Output: PDF + HTML aus einer Pipeline</div>
+      </div>
+      <div class="conseq-card negative">
+        <h4 style="color:var(--latex)">Trade-offs</h4>
+        <div class="conseq-item">Quarto muss im CI-Image installiert sein</div>
+        <div class="conseq-item">Zwei Notebook-Phasen müssen kommuniziert werden</div>
+        <div class="conseq-item">LaTeX-Kompetenz bleibt Pflicht für Paper + Thesis</div>
+        <div class="conseq-item">Figure-Pfade brauchen Disziplin</div>
+        <div class="conseq-item">Initialer Setup-Aufwand für _quarto.yml</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ IMPLEMENTATION ═════════════════════════════════ -->
+  <section class="anim d5">
+    <div class="section-header">
+      <div class="dot" style="background:var(--ci)"></div>
+      <h2>Implementation</h2>
+    </div>
+
+    <div class="impl-phases">
+      <div class="impl-card">
+        <h4><div class="phase-dot" style="background:var(--done)"></div> Phase 1 · Sofort</h4>
+        <div class="impl-item done"><div class="check">✓</div>Paper als .tex + .bib</div>
+        <div class="impl-item done"><div class="check">✓</div>Experiment-Notebook mit plt.savefig()</div>
+        <div class="impl-item done"><div class="check">✓</div>Interaktive HTML-Version</div>
+        <div class="impl-item pending"><div class="check"></div>Makefile für Build-Orchestrierung</div>
+        <div class="impl-item pending"><div class="check"></div>Verzeichnisstruktur in backoffice</div>
+        <div class="impl-item pending"><div class="check"></div>Files committen</div>
+      </div>
+      <div class="impl-card">
+        <h4><div class="phase-dot" style="background:var(--progress)"></div> Phase 2 · CI</h4>
+        <div class="impl-item pending"><div class="check"></div>Quarto im CI-Image</div>
+        <div class="impl-item pending"><div class="check"></div>paper:build Job in .gitlab-ci.yml</div>
+        <div class="impl-item pending"><div class="check"></div>Figure-Generation automatisieren</div>
+        <div class="impl-item pending"><div class="check"></div>Artifact-Upload für PDFs</div>
+      </div>
+      <div class="impl-card">
+        <h4><div class="phase-dot" style="background:var(--planned)"></div> Phase 3 · Thesis</h4>
+        <div class="impl-item pending"><div class="check"></div>JKU-Template beschaffen</div>
+        <div class="impl-item pending"><div class="check"></div>Thesis-Struktur anlegen</div>
+        <div class="impl-item pending"><div class="check"></div>Paper als Chapter einbinden</div>
+        <div class="impl-item pending"><div class="check"></div>Formalia (Titelblatt, Erklärung)</div>
+      </div>
+      <div class="impl-card">
+        <h4><div class="phase-dot" style="background:var(--text-muted)"></div> Phase 4 · Zukunft</h4>
+        <div class="impl-item pending"><div class="check"></div>CI-Metrics Paper (gleiche Pipeline)</div>
+        <div class="impl-item pending"><div class="check"></div>GitLab Pages für HTML-Dashboards</div>
+        <div class="impl-item pending"><div class="check"></div>Template für neue Publikationen</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ FOOTER ═════════════════════════════════════════ -->
+  <footer>
+    GOV-003 · Publication Pipeline Architecture · Wolfram Laube · 2026-02-07<br>
+    <a href="GOV-001-adr-structure.md">GOV-001</a> ·
+    <a href="GOV-002-notebook-standards.md">GOV-002</a> ·
+    <a href="../ai/AI-001-neurosymbolic-runner-selection.md">AI-001</a>
+  </footer>
+
+</div>
+</body>
+</html>
