@@ -17,8 +17,6 @@ stages:
 build-pandoc-docs:
   stage: build
   image: ubuntu:22.04
-  tags:
-    - docker-any
   
   variables:
     DEBIAN_FRONTEND: noninteractive
@@ -91,8 +89,6 @@ build-pandoc-docs:
 build-typst-docs:
   stage: build
   image: ubuntu:22.04
-  tags:
-    - docker-any
   
   variables:
     DEBIAN_FRONTEND: noninteractive
@@ -149,8 +145,6 @@ build-typst-docs:
 build-quarto-docs:
   stage: build
   image: ubuntu:22.04
-  tags:
-    - docker-any
   
   variables:
     DEBIAN_FRONTEND: noninteractive
@@ -215,8 +209,6 @@ build-quarto-docs:
 commit-all:
   stage: commit
   image: ubuntu:22.04
-  tags:
-    - docker-any
   
   variables:
     DEBIAN_FRONTEND: noninteractive
@@ -289,8 +281,6 @@ commit-all:
 upload-to-gdrive:
   stage: upload
   image: ubuntu:22.04
-  tags:
-    - docker-any
   
   variables:
     DEBIAN_FRONTEND: noninteractive
