@@ -99,3 +99,4 @@ CI/CD pipelines, GitLab runners, cloud infrastructure, Kubernetes.
 
 - **ADR:** [`_template.md`](./_template.md)
 - **Notebook:** [`docs/templates/notebook-template.ipynb`](../templates/notebook-template.ipynb)
+
