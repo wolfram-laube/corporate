@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADR-004: Application Tracking System — CSV → DB Migration & Portal Integration</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;600;700;900&display=swap');
+
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface2: #1a2332;
+    --border: #2a3a4d;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --accent-crawl: #f59e0b;   /* Crawl = amber */
+    --accent-match: #3b82f6;   /* Match = blue */
+    --accent-draft: #10b981;   /* Draft = emerald */
+    --accent-infra: #8b5cf6;   /* Infrastructure = purple */
+    --danger: #ef4444;
+    --done: #10b981;
+    --progress: #3b82f6;
+    --planned: #64748b;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .grain {
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  header {
+    padding: 3rem 2rem 2rem;
+    text-align: center;
+    position: relative;
+  }
+
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+
+  .title {
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--accent-crawl), var(--accent-draft), var(--accent-match));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+  }
+
+  .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  /* === ADR METADATA === */
+  .adr-meta {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-draft);
+    border-radius: 0 10px 10px 0;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 2.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem 2rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+  }
+
+  .adr-field { display: flex; gap: 0.5rem; }
+  .adr-key { color: var(--text-dim); white-space: nowrap; }
+  .adr-val { color: var(--text); font-weight: 500; }
+  .adr-val.accepted { color: var(--done); }
+
+  /* === DIALECTIC === */
+  .dialectic {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 0;
+    align-items: stretch;
+    margin: 2rem 0 3rem;
+  }
+
+  .dial-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .dial-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+
+  .dial-card.thesis { border-top: 3px solid var(--accent-match); }
+  .dial-card.thesis:hover { border-color: var(--accent-match); }
+  .dial-card.antithesis { border-top: 3px solid var(--accent-crawl); }
+  .dial-card.antithesis:hover { border-color: var(--accent-crawl); }
+  .dial-card.synthesis { border-top: 3px solid var(--accent-draft); }
+  .dial-card.synthesis:hover { border-color: var(--accent-draft); box-shadow: 0 8px 32px rgba(16, 185, 129, 0.1); }
+
+  .dial-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 0.75rem;
+  }
+
+  .thesis .dial-label { color: var(--accent-match); }
+  .antithesis .dial-label { color: var(--accent-crawl); }
+  .synthesis .dial-label { color: var(--accent-draft); }
+
+  .dial-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .dial-desc { font-size: 0.82rem; color: var(--text-dim); line-height: 1.6; }
+  .dial-arrow { display: flex; align-items: center; justify-content: center; padding: 0 0.5rem; color: var(--text-dim); font-size: 1.5rem; }
+
+  /* === SECTION TITLES === */
+  .section-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .section-title .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .arch-section { margin: 2.5rem 0; }
+
+  /* === ARCHITECTURE LAYERS === */
+  .arch-grid {
+    display: grid;
+    gap: 0;
+    position: relative;
+  }
+
+  .layer {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    background: var(--surface);
+  }
+
+  .layer + .layer {
+    margin-top: -1px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  .layer:first-child {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .layer:nth-child(2) { border-radius: 0; }
+
+  .layer-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .layer.frontend .layer-label { color: var(--accent-crawl); }
+  .layer.api .layer-label { color: var(--accent-draft); }
+  .layer.data .layer-label { color: var(--accent-infra); }
+  .layer.runners .layer-label { color: var(--accent-match); }
+
+  .layer-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid;
+  }
+
+  .layer.frontend .layer-tag { border-color: var(--accent-crawl); color: var(--accent-crawl); }
+  .layer.api .layer-tag { border-color: var(--accent-draft); color: var(--accent-draft); }
+  .layer.data .layer-tag { border-color: var(--accent-infra); color: var(--accent-infra); }
+  .layer.runners .layer-tag { border-color: var(--accent-match); color: var(--accent-match); }
+
+  .modules {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .module {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    transition: all 0.2s;
+  }
+
+  .module:hover { border-color: var(--text-dim); }
+
+  .module-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+  }
+
+  .module-desc {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .module-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    margin-top: 0.5rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .status-done { background: rgba(16,185,129,0.15); color: var(--done); }
+  .status-progress { background: rgba(59,130,246,0.15); color: var(--progress); }
+  .status-planned { background: rgba(100,116,139,0.15); color: var(--planned); }
+
+  .status-dot { width: 5px; height: 5px; border-radius: 50%; }
+  .status-done .status-dot { background: var(--done); }
+  .status-progress .status-dot { background: var(--progress); }
+  .status-planned .status-dot { background: var(--planned); }
+
+  /* === FLOW ARROWS === */
+  .flow-connector { text-align: center; padding: 0.5rem 0; }
+
+  .flow-arrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .flow-arrow::before,
+  .flow-arrow::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* === WORKFLOW PIPELINE === */
+  .pipeline {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 0;
+    align-items: stretch;
+    margin: 2rem 0;
+  }
+
+  .pipe-stage {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .pipe-stage:hover { transform: translateY(-2px); }
+
+  .pipe-stage.crawl { border-left: 3px solid var(--accent-crawl); }
+  .pipe-stage.match { border-left: 3px solid var(--accent-match); }
+  .pipe-stage.draft { border-left: 3px solid var(--accent-draft); }
+
+  .pipe-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 0.5rem;
+  }
+
+  .pipe-stage.crawl .pipe-label { color: var(--accent-crawl); }
+  .pipe-stage.match .pipe-label { color: var(--accent-match); }
+  .pipe-stage.draft .pipe-label { color: var(--accent-draft); }
+
+  .pipe-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; }
+  .pipe-desc { font-size: 0.78rem; color: var(--text-dim); line-height: 1.6; }
+
+  .pipe-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.3rem;
+    color: var(--text-dim);
+    font-size: 1.3rem;
+  }
+
+  /* === METRICS === */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin: 2rem 0;
+  }
+
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    text-align: center;
+  }
+
+  .metric-value {
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+  }
+
+  .metric-value.crawl { color: var(--accent-crawl); }
+  .metric-value.match { color: var(--accent-match); }
+  .metric-value.draft { color: var(--accent-draft); }
+  .metric-value.infra { color: var(--accent-infra); }
+
+  .metric-label {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 0.25rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* === SPRINT ROADMAP === */
+  .roadmap { margin: 2.5rem 0; }
+
+  .sprint {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+
+  .sprint::before {
+    content: '';
+    position: absolute;
+    left: 29px;
+    top: 40px;
+    bottom: -20px;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .sprint:last-child::before { display: none; }
+
+  .sprint-marker {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    z-index: 2;
+  }
+
+  .sprint-marker.s1 { background: rgba(16,185,129,0.2); color: var(--done); border: 1px solid var(--done); }
+  .sprint-marker.s2 { background: rgba(245,158,11,0.2); color: var(--accent-crawl); border: 1px solid var(--accent-crawl); }
+  .sprint-marker.s3 { background: rgba(59,130,246,0.2); color: var(--accent-match); border: 1px solid var(--accent-match); }
+  .sprint-marker.s4 { background: rgba(139,92,246,0.2); color: var(--accent-infra); border: 1px solid var(--accent-infra); }
+
+  .sprint-content {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+  }
+
+  .sprint-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+
+  .sprint-subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-bottom: 0.75rem;
+  }
+
+  .sprint-tasks {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .sprint-task {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    padding-left: 1rem;
+    position: relative;
+    line-height: 1.5;
+  }
+
+  .sprint-task::before {
+    content: '○';
+    position: absolute;
+    left: 0;
+    color: var(--text-dim);
+    font-size: 0.6rem;
+    top: 2px;
+  }
+
+  /* === DATA MODEL === */
+  .schema-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .schema-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .schema-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .schema-field {
+    display: grid;
+    grid-template-columns: 140px 90px 1fr;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    font-size: 0.72rem;
+    font-family: 'JetBrains Mono', monospace;
+    border-bottom: 1px solid rgba(42,58,77,0.3);
+  }
+
+  .schema-field:last-child { border-bottom: none; }
+
+  .field-name { color: var(--text); font-weight: 500; }
+  .field-type { color: var(--accent-match); }
+  .field-desc { color: var(--text-dim); font-family: 'Outfit', sans-serif; }
+
+  /* === ALTERNATIVES === */
+  .alternatives {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .alt-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    transition: all 0.2s;
+  }
+
+  .alt-card.rejected { opacity: 0.6; }
+  .alt-card.accepted { border-color: var(--done); }
+
+  .alt-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .alt-verdict {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .alt-verdict.yes { background: rgba(16,185,129,0.15); color: var(--done); }
+  .alt-verdict.no { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+  .alt-desc { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; }
+
+  /* === FOOTER === */
+  footer {
+    text-align: center;
+    padding: 2rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+  }
+
+  /* === RESPONSIVE === */
+  @media (max-width: 768px) {
+    .dialectic, .pipeline { grid-template-columns: 1fr; gap: 0.5rem; }
+    .dial-arrow, .pipe-arrow { transform: rotate(90deg); padding: 0.5rem 0; }
+    .adr-meta { grid-template-columns: 1fr; }
+    .modules { grid-template-columns: 1fr; }
+    .schema-field { grid-template-columns: 1fr; gap: 0.15rem; }
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<header>
+  <div class="title">Application Tracking System</div>
+  <div class="subtitle">CSV → SQLite · GitLab CI Pipeline · Pages Portal · Crawl → Match → Draft</div>
+</header>
+
+<div class="container">
+
+  <!-- ADR METADATA -->
+  <div class="adr-meta">
+    <div class="adr-field">
+      <span class="adr-key">ADR:</span>
+      <span class="adr-val">004 — Application Tracking System</span>
+    </div>
+    <div class="adr-field">
+      <span class="adr-key">Status:</span>
+      <span class="adr-val accepted">✓ Accepted</span>
+    </div>
+    <div class="adr-field">
+      <span class="adr-key">Context:</span>
+      <span class="adr-val">190+ applications in CSV, manual workflow, no portal</span>
+    </div>
+    <div class="adr-field">
+      <span class="adr-key">Decision:</span>
+      <span class="adr-val">CI-triggered pipeline + SQLite on GCS + GitLab Pages</span>
+    </div>
+    <div class="adr-field">
+      <span class="adr-key">Consequences:</span>
+      <span class="adr-val">No permanent server, runner-agnostic, zero cost</span>
+    </div>
+    <div class="adr-field">
+      <span class="adr-key">Supersedes:</span>
+      <span class="adr-val">CSV-based tracking in Claude sessions</span>
+    </div>
+    <div class="adr-field">
+      <span class="adr-key">Related:</span>
+      <span class="adr-val">ADR-027 (NSAI), GOV-002 (CI/CD), GOV-003 (Publications)</span>
+    </div>
+    <div class="adr-field">
+      <span class="adr-key">Date:</span>
+      <span class="adr-val">2026-02-09</span>
+    </div>
+  </div>
+
+  <!-- DIALECTIC -->
+  <div class="dialectic">
+    <div class="dial-card thesis">
+      <div class="dial-label">These · CSV Flat File</div>
+      <div class="dial-title">Manuelle Verwaltung</div>
+      <div class="dial-desc">CSV im Git-Repo, editiert in Claude-Sessions. Einfach, versioniert, universell lesbar. Aber: kein Multi-Runner-Zugriff, keine Suche/Filter, kein Audit-Trail, kein Portal-Trigger. Skaliert nicht über 200+ Einträge.</div>
+    </div>
+    <div class="dial-arrow">→</div>
+    <div class="dial-card antithesis">
+      <div class="dial-label">Antithese · Permanent Server</div>
+      <div class="dial-title">Cloud Run + DB</div>
+      <div class="dial-desc">FastAPI auf Cloud Run, SQLite auf GCS. Immer erreichbar, saubere API. Aber: neue Infrastruktur-Komponente, Cold Starts, GCS-Abhängigkeit im Hot Path, Deployment-Overhead. Löst ein Problem das nicht existiert — Single-User, asynchroner Workflow.</div>
+    </div>
+    <div class="dial-arrow">→</div>
+    <div class="dial-card synthesis">
+      <div class="dial-label">Synthese · CI-Triggered Pipeline</div>
+      <div class="dial-title">GitLab CI + GCS + Pages</div>
+      <div class="dial-desc">Kein permanenter Server. Pages-Button triggert GitLab CI Pipeline. CI-Job lädt SQLite von GCS, führt Crawl/Match/Draft aus, exportiert JSON für Pages-Frontend, speichert DB zurück. Nutzt nur bestehende Infrastruktur. Zero Cost, Zero Ops.</div>
+    </div>
+  </div>
+
+  <!-- KEY METRICS -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-value crawl">190+</div>
+      <div class="metric-label">Bewerbungen (aktuell CSV)</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value match">3</div>
+      <div class="metric-label">Quellen (GULP, fm, fl.de)</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value draft">4</div>
+      <div class="metric-label">Runner in der Herde</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value infra">0€</div>
+      <div class="metric-label">Zusätzliche Kosten</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value crawl">6</div>
+      <div class="metric-label">Sprints zum MVP</div>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <section class="arch-section">
+    <div class="section-title">
+      <span class="dot" style="background: var(--accent-infra)"></span>
+      Architektur
+    </div>
+
+    <div class="arch-grid">
+      <!-- Frontend Layer -->
+      <div class="layer frontend">
+        <div class="layer-label">
+          ◆ GitLab Pages Frontend
+          <span class="layer-tag">Statisch · HTML/JS · Tailwind</span>
+        </div>
+        <div class="modules">
+          <div class="module">
+            <div class="module-name">Dashboard</div>
+            <div class="module-desc">Übersicht aller Bewerbungen. Sort/Filter/Search. Match-Score Visualisierung. Status-Pipeline (Kanban).</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 2</div>
+          </div>
+          <div class="module">
+            <div class="module-name">Crawl Trigger</div>
+            <div class="module-desc">Button → GitLab API Pipeline Trigger. Status-Polling bis Job fertig. Neue Ergebnisse live laden.</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 3</div>
+          </div>
+          <div class="module">
+            <div class="module-name">Draft Editor</div>
+            <div class="module-desc">Template-Auswahl (GULP 1500 chars, Email, freelancermap). LLM-generierten Text editieren. Absenden → Status-Update.</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 5</div>
+          </div>
+          <div class="module">
+            <div class="module-name">Stats & Charts</div>
+            <div class="module-desc">Bewerbungen/Monat, Match-Verteilung, Erfolgsquoten, Top-Provider, Rate-Analyse.</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 2</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-connector">
+        <div class="flow-arrow">fetch() → Static JSON on GCS/Pages</div>
+      </div>
+
+      <!-- CI Pipeline Layer -->
+      <div class="layer api">
+        <div class="layer-label">
+          ◆ GitLab CI Pipeline
+          <span class="layer-tag">Trigger · Any Runner · On-Demand</span>
+        </div>
+        <div class="modules">
+          <div class="module">
+            <div class="module-name">applications:crawl</div>
+            <div class="module-desc">GULP/freelancermap/freelance.de Scraper. Deduplizierung. Neue Projekte → crawl_results. Schedule: Mo–Fr 08:00 + Portal-Trigger.</div>
+            <div class="module-status status-done"><span class="status-dot"></span> Existiert (Basis)</div>
+          </div>
+          <div class="module">
+            <div class="module-name">applications:match</div>
+            <div class="module-desc">Skill-Extraktion aus Beschreibung. Abgleich mit CV-Profil. Score 0–100 berechnen. Stärken/Gaps identifizieren.</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 4</div>
+          </div>
+          <div class="module">
+            <div class="module-name">applications:draft</div>
+            <div class="module-desc">Template-basierte Textgenerierung. LLM-Integration (Claude API oder lokal). Output → JSON für Portal-Editor.</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 5</div>
+          </div>
+          <div class="module">
+            <div class="module-name">applications:export</div>
+            <div class="module-desc">DB → JSON für Pages-Frontend. DB → CSV für Git-Fallback (nightly). DB → GCS Upload. Artifact-Publish.</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 1</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-connector">
+        <div class="flow-arrow">SQLite download ↔ work ↔ upload (GCS)</div>
+      </div>
+
+      <!-- Data Layer -->
+      <div class="layer data">
+        <div class="layer-label">
+          ◆ Datenschicht
+          <span class="layer-tag">SQLite · GCS · Git Fallback</span>
+        </div>
+        <div class="modules">
+          <div class="module">
+            <div class="module-name">applications.db (GCS)</div>
+            <div class="module-desc">SQLite auf GCS Bucket. Single Source of Truth. CI-Job lädt runter → bearbeitet → lädt hoch. Locking via Pipeline-Serialisierung.</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 1</div>
+          </div>
+          <div class="module">
+            <div class="module-name">dashboard.json (GCS/Pages)</div>
+            <div class="module-desc">Statischer JSON-Export für Pages-Frontend. Wird nach jedem Pipeline-Run aktualisiert. Kein Live-Query nötig.</div>
+            <div class="module-status status-planned"><span class="status-dot"></span> Sprint 1</div>
+          </div>
+          <div class="module">
+            <div class="module-name">CSV Fallback (Git)</div>
+            <div class="module-desc">Nightly Export: DB → CSV → Git Commit. Bewährter Fallback. Lesbar ohne Tools. Ultimative Recovery-Option.</div>
+            <div class="module-status status-done"><span class="status-dot"></span> Existiert (aktuell)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-connector">
+        <div class="flow-arrow">curl / requests → HTTP (any runner, any location)</div>
+      </div>
+
+      <!-- Runner Layer -->
+      <div class="layer runners">
+        <div class="layer-label">
+          ◆ Runner-Herde
+          <span class="layer-tag">Heterogen · NSAI-Selected · Runner-Agnostisch</span>
+        </div>
+        <div class="modules">
+          <div class="module">
+            <div class="module-name">Mac Docker Runner</div>
+            <div class="module-desc">Lokal, immer verfügbar wenn Mac an. ID: 51336735.</div>
+            <div class="module-status status-done"><span class="status-dot"></span> Online</div>
+          </div>
+          <div class="module">
+            <div class="module-name">Mac2 Docker Runner</div>
+            <div class="module-desc">Zweiter lokaler Runner. ID: 51337424.</div>
+            <div class="module-status status-done"><span class="status-dot"></span> Online</div>
+          </div>
+          <div class="module">
+            <div class="module-name">Linux Yoga Docker</div>
+            <div class="module-desc">Lokaler Linux-Runner. ID: 51337426.</div>
+            <div class="module-status status-done"><span class="status-dot"></span> Online</div>
+          </div>
+          <div class="module">
+            <div class="module-name">gitlab-runner-nordic</div>
+            <div class="module-desc">GCP Stockholm, e2-small, preemptible. ID: 51608579.</div>
+            <div class="module-status status-done"><span class="status-dot"></span> Online</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WORKFLOW PIPELINE -->
+  <section class="arch-section">
+    <div class="section-title">
+      <span class="dot" style="background: var(--accent-draft)"></span>
+      Workflow: Crawl → Match → Draft
+    </div>
+
+    <div class="pipeline">
+      <div class="pipe-stage crawl">
+        <div class="pipe-label">Phase 1 · Crawl</div>
+        <div class="pipe-title">Projektbörsen scannen</div>
+        <div class="pipe-desc">
+          Trigger: Portal-Button oder CI Schedule (Mo–Fr 08:00)<br><br>
+          → GULP API/Scraper<br>
+          → freelancermap API<br>
+          → freelance.de API<br><br>
+          Deduplizierung (source + external_id).<br>
+          Neue Projekte → crawl_results mit status='new'.
+        </div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-stage match">
+        <div class="pipe-label">Phase 2 · Match</div>
+        <div class="pipe-title">Profil-Abgleich</div>
+        <div class="pipe-desc">
+          Für jede crawl_result (status='new'):<br><br>
+          → Skill-Extraktion aus Beschreibung<br>
+          → Abgleich mit CV-Profil-Vektor<br>
+          → Match-Score berechnen (0–100)<br>
+          → Stärken/Gaps identifizieren<br><br>
+          Sortiert nach Score im Portal anzeigen.
+        </div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-stage draft">
+        <div class="pipe-label">Phase 3 · Draft</div>
+        <div class="pipe-title">Bewerbung generieren</div>
+        <div class="pipe-desc">
+          User klickt "Draft" im Portal:<br><br>
+          → Template wählen (GULP 1500, Email, fm)<br>
+          → LLM-Draft generieren<br>
+          → User editiert im Portal<br>
+          → Absenden → Status 'versendet'<br><br>
+          Application in DB anlegen + Audit-Trail.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA MODEL -->
+  <section class="arch-section">
+    <div class="section-title">
+      <span class="dot" style="background: var(--accent-match)"></span>
+      Datenmodell
+    </div>
+
+    <div class="schema-grid">
+      <div class="schema-card">
+        <div class="schema-name" style="color: var(--accent-draft);">applications</div>
+        <div class="schema-field"><span class="field-name">id</span><span class="field-type">INTEGER PK</span><span class="field-desc">Auto-Increment</span></div>
+        <div class="schema-field"><span class="field-name">date_recorded</span><span class="field-type">DATE</span><span class="field-desc">Erfassungsdatum</span></div>
+        <div class="schema-field"><span class="field-name">project_title</span><span class="field-type">TEXT</span><span class="field-desc">Projekttitel</span></div>
+        <div class="schema-field"><span class="field-name">provider</span><span class="field-type">TEXT</span><span class="field-desc">Agentur/Vermittler</span></div>
+        <div class="schema-field"><span class="field-name">contact_name</span><span class="field-type">TEXT</span><span class="field-desc">Ansprechpartner</span></div>
+        <div class="schema-field"><span class="field-name">contact_email</span><span class="field-type">TEXT</span><span class="field-desc">Email</span></div>
+        <div class="schema-field"><span class="field-name">phone</span><span class="field-type">TEXT</span><span class="field-desc">Telefon</span></div>
+        <div class="schema-field"><span class="field-name">location</span><span class="field-type">TEXT</span><span class="field-desc">Einsatzort/Remote</span></div>
+        <div class="schema-field"><span class="field-name">start_date</span><span class="field-type">TEXT</span><span class="field-desc">Projektstart</span></div>
+        <div class="schema-field"><span class="field-name">duration</span><span class="field-type">TEXT</span><span class="field-desc">Laufzeit</span></div>
+        <div class="schema-field"><span class="field-name">workload</span><span class="field-type">TEXT</span><span class="field-desc">Auslastung</span></div>
+        <div class="schema-field"><span class="field-name">rate_eur_h</span><span class="field-type">REAL</span><span class="field-desc">Stundensatz</span></div>
+        <div class="schema-field"><span class="field-name">status</span><span class="field-type">TEXT</span><span class="field-desc">Pipeline-Status</span></div>
+        <div class="schema-field"><span class="field-name">match_score</span><span class="field-type">INTEGER</span><span class="field-desc">0–100</span></div>
+        <div class="schema-field"><span class="field-name">notes</span><span class="field-type">TEXT</span><span class="field-desc">Freitext-Notizen</span></div>
+        <div class="schema-field"><span class="field-name">source_url</span><span class="field-type">TEXT</span><span class="field-desc">Portal-Link</span></div>
+        <div class="schema-field"><span class="field-name">project_id</span><span class="field-type">TEXT</span><span class="field-desc">Portal-spezifische ID</span></div>
+      </div>
+
+      <div class="schema-card">
+        <div class="schema-name" style="color: var(--accent-crawl);">crawl_results</div>
+        <div class="schema-field"><span class="field-name">id</span><span class="field-type">INTEGER PK</span><span class="field-desc">Auto-Increment</span></div>
+        <div class="schema-field"><span class="field-name">source</span><span class="field-type">TEXT</span><span class="field-desc">gulp / freelancermap / fl.de</span></div>
+        <div class="schema-field"><span class="field-name">external_id</span><span class="field-type">TEXT</span><span class="field-desc">Portal-ID (unique)</span></div>
+        <div class="schema-field"><span class="field-name">title</span><span class="field-type">TEXT</span><span class="field-desc">Projekttitel</span></div>
+        <div class="schema-field"><span class="field-name">raw_data</span><span class="field-type">JSON</span><span class="field-desc">Komplettes Crawl-Ergebnis</span></div>
+        <div class="schema-field"><span class="field-name">match_score</span><span class="field-type">INTEGER</span><span class="field-desc">0–100</span></div>
+        <div class="schema-field"><span class="field-name">match_reasons</span><span class="field-type">JSON</span><span class="field-desc">{strengths, gaps}</span></div>
+        <div class="schema-field"><span class="field-name">status</span><span class="field-type">TEXT</span><span class="field-desc">new / matched / applied / dismissed</span></div>
+        <div class="schema-field"><span class="field-name">crawled_at</span><span class="field-type">DATETIME</span><span class="field-desc">Zeitstempel</span></div>
+
+        <div class="schema-name" style="color: var(--accent-infra); margin-top: 1.5rem;">application_history</div>
+        <div class="schema-field"><span class="field-name">id</span><span class="field-type">INTEGER PK</span><span class="field-desc">Auto-Increment</span></div>
+        <div class="schema-field"><span class="field-name">application_id</span><span class="field-type">INTEGER FK</span><span class="field-desc">→ applications.id</span></div>
+        <div class="schema-field"><span class="field-name">field_changed</span><span class="field-type">TEXT</span><span class="field-desc">Welches Feld</span></div>
+        <div class="schema-field"><span class="field-name">old_value</span><span class="field-type">TEXT</span><span class="field-desc">Alter Wert</span></div>
+        <div class="schema-field"><span class="field-name">new_value</span><span class="field-type">TEXT</span><span class="field-desc">Neuer Wert</span></div>
+        <div class="schema-field"><span class="field-name">changed_at</span><span class="field-type">DATETIME</span><span class="field-desc">Zeitstempel</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- KEY PATTERN -->
+  <section class="arch-section">
+    <div class="section-title">
+      <span class="dot" style="background: var(--accent-draft)"></span>
+      Kernpattern: CI-Triggered Static Export
+    </div>
+
+    <div class="layer" style="border-radius: 12px; margin-bottom: 1.5rem;">
+      <div class="layer-label" style="color: var(--accent-draft);">
+        ◆ Warum kein permanenter Server?
+      </div>
+      <div class="modules" style="grid-template-columns: 1fr 1fr;">
+        <div class="module">
+          <div class="module-name">Der Workflow ist asynchron</div>
+          <div class="module-desc">Mensch klickt "Crawl" → wartet 30s → schaut Ergebnisse an → entscheidet in Minuten, nicht Millisekunden. Ein CI-Job der 30 Sekunden läuft ist schnell genug. Kein WebSocket, kein Real-Time, kein Server-Side Rendering nötig.</div>
+        </div>
+        <div class="module">
+          <div class="module-name">Pages ist schon da</div>
+          <div class="module-desc">GitLab Pages serviert statisches HTML/JS. Nach jedem Pipeline-Run wird ein frisches dashboard.json exportiert. Das Frontend lädt es bei Page-Load. Keine API, kein CORS, kein Auth — die JSON-Datei liegt einfach neben dem HTML.</div>
+        </div>
+        <div class="module">
+          <div class="module-name">Jeder Runner kann es</div>
+          <div class="module-desc">CI-Job: <code>gsutil cp gs://bucket/applications.db . && python match.py && gsutil cp applications.db gs://bucket/</code>. Egal ob Mac, Yoga, Nordic oder k3s. Alles was Docker und gcloud kann, kann mitspielen.</div>
+        </div>
+        <div class="module">
+          <div class="module-name">Fallback ist eingebaut</div>
+          <div class="module-desc">Nightly: DB → CSV → Git Commit. Wenn alles brennt: CSV öffnen, manuell editieren, weitermachen. Genau wie heute. Der neue Stack ist ein Upgrade, kein Ersatz — der alte Weg bleibt als Fallback erhalten.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ALTERNATIVES CONSIDERED -->
+  <section class="arch-section">
+    <div class="section-title">
+      <span class="dot" style="background: var(--danger)"></span>
+      Verworfene Alternativen
+    </div>
+
+    <div class="alternatives">
+      <div class="alt-card rejected">
+        <div class="alt-title">
+          Cloud Run + GCS Hot Path
+          <span class="alt-verdict no">✗ Verworfen</span>
+        </div>
+        <div class="alt-desc">FastAPI permanent auf Cloud Run. SQLite von GCS bei Cold Start laden. Problem: neue Infrastruktur-Komponente, Cold Starts, GCS-Abhängigkeit, Deployment-Overhead. Löst ein Problem das bei einem Single-User nicht existiert.</div>
+      </div>
+      <div class="alt-card rejected">
+        <div class="alt-title">
+          SQLite auf VM (Nordic)
+          <span class="alt-verdict no">✗ Verworfen</span>
+        </div>
+        <div class="alt-desc">API permanent auf der GCP VM. Problem: VM ist preemptible und wird bewusst gestoppt. API müsste 24/7 laufen → widerspricht dem Cost-Saving-Ansatz.</div>
+      </div>
+      <div class="alt-card rejected">
+        <div class="alt-title">
+          SQLite im Git-Repo
+          <span class="alt-verdict no">✗ Verworfen</span>
+        </div>
+        <div class="alt-desc">DB als Binary direkt in Git. Problem: Binary Diffs, Merge Conflicts bei concurrent Commits, kein Live-Zugriff vom Pages-Frontend.</div>
+      </div>
+      <div class="alt-card rejected">
+        <div class="alt-title">
+          PostgreSQL (Cloud SQL)
+          <span class="alt-verdict no">✗ Verworfen</span>
+        </div>
+        <div class="alt-desc">Managed PostgreSQL. Problem: Overkill für ~200 Einträge/Jahr, Single User. 10–25 EUR/Monat laufende Kosten. Könnte Upgrade-Pfad sein (SQLAlchemy macht Switch trivial).</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SPRINT ROADMAP -->
+  <section class="roadmap">
+    <div class="section-title">
+      <span class="dot" style="background: var(--accent-crawl)"></span>
+      Sprint Roadmap
+    </div>
+
+    <div class="sprint">
+      <div class="sprint-marker s1">S1</div>
+      <div class="sprint-content">
+        <div class="sprint-title">Foundation</div>
+        <div class="sprint-subtitle">1–2 Sessions · SQLAlchemy + GCS + CSV-Import</div>
+        <div class="sprint-tasks">
+          <div class="sprint-task">SQLAlchemy Models + Alembic Migrations definieren</div>
+          <div class="sprint-task">GCS State Management (download DB → work → upload DB)</div>
+          <div class="sprint-task">CSV-Import Script: 190+ Einträge migrieren</div>
+          <div class="sprint-task">JSON-Export für Pages-Frontend generieren</div>
+          <div class="sprint-task">CI-Job: applications:export in .gitlab/applications.yml</div>
+          <div class="sprint-task">ADR-004 committen (corporate)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sprint">
+      <div class="sprint-marker s2">S2</div>
+      <div class="sprint-content">
+        <div class="sprint-title">Portal Frontend</div>
+        <div class="sprint-subtitle">1–2 Sessions · GitLab Pages Dashboard</div>
+        <div class="sprint-tasks">
+          <div class="sprint-task">HTML/JS Dashboard mit Tailwind</div>
+          <div class="sprint-task">Tabelle mit Sort/Filter/Search über dashboard.json</div>
+          <div class="sprint-task">Detail-View mit Status-Edit</div>
+          <div class="sprint-task">Stats/Charts (Chart.js: Bewerbungen/Monat, Match-Verteilung)</div>
+          <div class="sprint-task">Status-Pipeline Kanban Visualization</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sprint">
+      <div class="sprint-marker s3">S3</div>
+      <div class="sprint-content">
+        <div class="sprint-title">Crawl Engine</div>
+        <div class="sprint-subtitle">1–2 Sessions · GULP + freelancermap + freelance.de</div>
+        <div class="sprint-tasks">
+          <div class="sprint-task">GULP Scraper/API Integration</div>
+          <div class="sprint-task">freelancermap Integration</div>
+          <div class="sprint-task">freelance.de Integration</div>
+          <div class="sprint-task">Deduplizierung + crawl_results Persistenz</div>
+          <div class="sprint-task">Portal: Pipeline-Trigger Button (GitLab API)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sprint">
+      <div class="sprint-marker s2">S4</div>
+      <div class="sprint-content">
+        <div class="sprint-title">Match Engine</div>
+        <div class="sprint-subtitle">1–2 Sessions · Profil-Vektor + Scoring</div>
+        <div class="sprint-tasks">
+          <div class="sprint-task">Profil-Vektor aus CV extrahieren</div>
+          <div class="sprint-task">Skill-Extraktion aus Projektbeschreibungen</div>
+          <div class="sprint-task">Scoring-Algorithmus (gewichtet: Must-Haves, Rate, Location, Duration)</div>
+          <div class="sprint-task">Match-Reasons Generator (Stärken/Gaps)</div>
+          <div class="sprint-task">Portal: Match-Ergebnisse sortiert anzeigen</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sprint">
+      <div class="sprint-marker s3">S5</div>
+      <div class="sprint-content">
+        <div class="sprint-title">Draft Engine</div>
+        <div class="sprint-subtitle">1–2 Sessions · Templates + LLM + Editor</div>
+        <div class="sprint-tasks">
+          <div class="sprint-task">Template-System (GULP 1500 chars, Email, freelancermap)</div>
+          <div class="sprint-task">LLM-Integration für Draft-Generierung</div>
+          <div class="sprint-task">Portal: Draft-Editor mit Preview und Template-Wahl</div>
+          <div class="sprint-task">Absenden-Flow: Status-Update + Audit-Trail</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sprint">
+      <div class="sprint-marker s4">S6</div>
+      <div class="sprint-content">
+        <div class="sprint-title">CI Integration & Monitoring</div>
+        <div class="sprint-subtitle">1 Session · Schedules + Alerts + Nightly Backup</div>
+        <div class="sprint-tasks">
+          <div class="sprint-task">applications.yml aktualisieren: CI Jobs nutzen DB statt CSV</div>
+          <div class="sprint-task">Schedule beibehalten (Mo–Fr 08:00 Crawl)</div>
+          <div class="sprint-task">Nightly CSV-Export → Git Commit (Fallback)</div>
+          <div class="sprint-task">Alerting: Neue High-Score Matches per Email/Webhook</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  ADR-004 · Application Tracking System · Blauweiss EDV e.U. · 2026-02-09
+  <br>
+  Pattern: CI-Triggered Static Export · GitLab CI + SQLite/GCS + Pages
+</footer>
+
+</body>
+</html>
